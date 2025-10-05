@@ -126,6 +126,36 @@ Notes:
 
 - The payment watcher uses APScheduler to poll email notifications (see `src/app/background/payment_watcher.py`). Configure the interval via `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES` in `.env`.
 
+## Routes
+
+All application routes are registered under the `/api` prefix. The main endpoints are:
+
+- POST /api/jotform-webhook
+	- Description: Receives JotForm webhook submissions. Expects JSON body from JotForm.
+	- Query params (required): `pr_amount` (float), `normal_amount` (float)
+	- Returns: JSON with `message` and `result` (processed registration details).
+	- Example:
+
+```bash
+curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
+	-H "Content-Type: application/json" \
+	-d '{"name": {"first": "Jane", "last": "Doe"}, "email": "jane@example.com", ... }'
+```
+
+- GET /api/check-payments
+	- Description: Triggers a one-time scan for payment emails and returns matched results.
+	- Query params (optional): `from` (email address, defaults to `ZEFFY_EMAIL` from config), `subject` (defaults to `ZEFFY_SUBJECT`).
+	- Returns: JSON with `count` and `results`.
+	- Example:
+
+```bash
+curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject=Payment+Received"
+```
+
+Notes:
+- The Blueprints are registered in `src/app/routes/__init__.py` and mounted at `/api`.
+- Handlers return JSON and appropriate HTTP status codes for error cases.
+
 ## Development tips & common troubleshooting
 
 - Python version: Use 3.9.
