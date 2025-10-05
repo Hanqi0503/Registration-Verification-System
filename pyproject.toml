@@ -11,3 +11,5 @@ dependencies = [
     "pymongo>=4.15.2",
     "python-dotenv>=1.1.1",
 ]
+[tool.uv.scripts]
+dev = "python src/main.py"
