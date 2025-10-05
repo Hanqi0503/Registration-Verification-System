@@ -27,6 +27,7 @@ def payment_service(from_email: str, subject_keyword: str) -> dict :
     """
     gmail_pass = Config.ADMIN_EMAIL_PASSWORD
 
+    # Assigned to Mudra
     # using functions in app.utils.imap_utils to connect with gmail and search Zeffy mail and then extract body
     # Check mail body to find payer_full_name, amount_of_payment and unique_id
     # Since we haven't had Zeffy notification mail, please mock one by yourself
