@@ -1,6 +1,5 @@
 # Ignore local environment files with secrets
 .env
-.env.*
 
 # Virtual environment directories
 .venv/
