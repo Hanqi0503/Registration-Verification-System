@@ -103,7 +103,7 @@ python src/main.py
 If you use the `uv` runner you previously used:
 
 ```bash
-uv run dev
+uv run python src/main.py
 ```
 
 Visit http://127.0.0.1:5050 (or the host/port from your `.env`) to see the landing endpoint.
