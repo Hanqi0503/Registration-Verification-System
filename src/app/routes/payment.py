@@ -15,4 +15,5 @@ def check_payments():
     from_email = request.args.get("from", Config.ZEFFY_EMAIL)
     subject = request.args.get("subject", Config.ZEFFY_SUBJECT)
     results = payment_service(from_email, subject)
-    return jsonify({"count": len(results), "results": results})
+
+    return jsonify({"count": len(results), "results": results}), 200

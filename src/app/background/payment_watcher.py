@@ -1,5 +1,5 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.payment_service import payment_service
+from app.services import payment_service
 from app.config.config import Config
 
 def start_payment_job():
