@@ -1,3 +1,4 @@
+from datetime import date, datetime
 import imaplib
 import email
 from email.header import decode_header
@@ -10,7 +11,7 @@ def connect_gmail(username: str, app_password: str):
     imap.login(username, app_password)
     return imap
 
-def search_emails(imap, from_email=None, subject_keyword=None):
+def search_emails(imap, from_email=None, subject_keyword=None, since_date=None):
     """Search Gmail inbox for specific sender and/or subject."""
     imap.select("inbox")
 
@@ -21,11 +22,28 @@ def search_emails(imap, from_email=None, subject_keyword=None):
     if subject_keyword:
         criteria.append(f'SUBJECT "{subject_keyword}"')
 
+    # Optional date filter (SINCE)
+    if since_date:
+        # Allow either a string like "07-Oct-2025" or datetime object
+        if isinstance(since_date, datetime):
+            since_str = since_date.strftime("%d-%b-%Y")
+        elif isinstance(since_date, date):
+            since_str = since_date.strftime("%d-%b-%Y")
+        elif isinstance(since_date, str):
+            # Expecting "DD-Mon-YYYY" format already
+            since_str = since_date
+        else:
+            raise TypeError("since_date must be datetime, date, or IMAP-formatted string")
+        criteria.append(f'SINCE {since_str}')
+
     search_query = " ".join(criteria) if criteria else "ALL"
 
     status, messages = imap.search(None, search_query)
-    email_ids = messages[0].split()
-    return email_ids
+    if status != "OK":
+        print("❌ IMAP search failed:", status)
+        return []
+
+    return messages[0].split()
 
 def fetch_email(imap, email_id):
     """Fetch and decode an email by ID."""
