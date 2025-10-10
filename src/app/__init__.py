@@ -2,7 +2,7 @@ from flask import Flask
 from app.config.config import Config
 from app.services.database import init_csv
 from app.routes import register_blueprints
-from app.background.payment_watcher import start_payment_job
+from app.background import start_payment_job
 from typing import Optional
 def create_app(config_object: Optional[str] = None):
     """App factory: load config, init extensions, register blueprints."""

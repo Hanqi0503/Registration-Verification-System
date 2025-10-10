@@ -103,7 +103,7 @@ python src/main.py
 If you use the `uv` runner you previously used:
 
 ```bash
-uv run dev
+uv run python src/main.py
 ```
 
 Visit http://127.0.0.1:5050 (or the host/port from your `.env`) to see the landing endpoint.
@@ -116,6 +116,11 @@ Visit http://127.0.0.1:5050 (or the host/port from your `.env`) to see the landi
 Notes:
 - `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES` must be an integer; the background scheduler expects a numeric minutes value.
 - If you see errors about saving CSV files to a non-existent `data` directory, either create the directory or let the `init_csv` helper create it for you. The repository already contains a `data/registration_data.csv` example.
+
+Additional configuration variables
+- `JOTFORM_API_KEY` - (optional) API key used when fetching image URLs hosted by JotForm. When present the utility will append it as `?apiKey=...` to JotForm URLs.
+- `NINJA_API_URL` - (optional) Image->text OCR endpoint used by the `ninja_image_to_text` helper (default: `https://api.api-ninjas.com/v1/imagetotext`).
+- `NINJA_API_KEY` - (optional but required if you call the Ninja OCR service) API key for the Image->Text API (api-ninjas.com).
 
 ## Data storage
 
@@ -155,6 +160,42 @@ curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject
 Notes:
 - The Blueprints are registered in `src/app/routes/__init__.py` and mounted at `/api`.
 - Handlers return JSON and appropriate HTTP status codes for error cases.
+
+## Image utilities & OCR
+
+This project includes small helpers for downloading images and performing OCR using an external "image to text" API. They live under `src/app/utils/image_utils.py` and the main helpers are:
+
+- `fetch_image_bytes(image_url: str) -> bytes`
+	- Downloads an image from `image_url` and returns the raw bytes.
+	- If the URL points to an HTML page, the helper will parse the page and extract the first `<img src=...>` it finds and then download that image instead.
+	- If `JOTFORM_API_KEY` is set in your `.env`, the function will append it as a query parameter when requesting JotForm-hosted image URLs.
+
+- `extract_image_url(html_content: str | bytes) -> str`
+	- Parses HTML content and returns the first `<img>` `src` value found. Raises `ValueError` if none found.
+
+- `ninja_image_to_text(img_url: str) -> dict`
+	- Convenience wrapper that downloads image bytes (via `fetch_image_bytes`) then calls the configured `NINJA_API_URL` with header `X-Api-Key: <NINJA_API_KEY>` and returns the parsed JSON result.
+	- Requires `NINJA_API_KEY` set in `.env` when you call it.
+
+Example usage (Python):
+
+```python
+from app.utils.image_utils import fetch_image_bytes, ninja_image_to_text
+
+# download raw bytes
+img_bytes = fetch_image_bytes('https://example.com/path/to/image.jpg')
+
+# send image to OCR service
+ocr_result = ninja_image_to_text('https://example.com/path/to/image.jpg')
+print(ocr_result)
+```
+
+Dependencies
+- These helpers use the following third-party packages; ensure they are installed in your environment (they are listed in `pyproject.toml`):
+	- `requests` (HTTP requests)
+	- `beautifulsoup4` (HTML parsing, provides `bs4`)
+	- `pillow` (PIL, for fallback image decoding)
+
 
 ## Development tips & common troubleshooting
 
