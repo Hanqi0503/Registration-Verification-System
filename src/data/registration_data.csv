@@ -1,1 +1,1 @@
-Form_ID,Full_Name,Email,Phone_Number,PR_Status,PR_Card_Number,PR_File_Upload_URLs,Amount_of_Payment,Payer_Full_Name,Zeffy_Unique_ID,Paid
+Form_ID,Full_Name,Email,Phone_Number,PR_Status,PR_Card_Number,PR_File_Upload_URLs,Amount_of_Payment,Payer_Full_Name,Unique_ID,Paid,Payment_Status
