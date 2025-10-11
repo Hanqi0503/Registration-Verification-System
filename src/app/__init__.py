@@ -11,9 +11,9 @@ def create_app(config_object: Optional[str] = None):
     
 
     # optional: fail fast if required env vars missing
-    Config.validate_required()
+    #Config.validate_required()
 
     app.db = init_csv()
-    start_payment_job()
+    #start_payment_job()
     register_blueprints(app)
     return app

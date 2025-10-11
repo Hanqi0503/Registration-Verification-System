@@ -31,8 +31,9 @@ def save_to_csv(data: dict) -> bool:
     Returns:
         Boolean
     """
-
-    # Jay Please implement the CSV saving logic here
+    return True
+    # Assigned to Jay
+    # Please implement the CSV saving logic here
     # Please using current_app.db because app.db = init_csv() in app.__init__.py
     # So you can check the logic in init_csv() function in app.services.database
         
@@ -49,6 +50,7 @@ def update_to_csv(data: dict) -> bool:
     """
     return True
 
-    # Mudro Please implement the CSV saving logic here
+    # Assigned to Jay
+    # Please implement the CSV saving logic here
     # Please using current_app.db because app.db = init_csv() in app.__init__.py
     # So you can check the logic in init_csv() function in app.services.database

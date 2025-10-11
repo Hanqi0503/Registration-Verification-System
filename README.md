@@ -149,12 +149,18 @@ curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amo
 
 - GET /api/check-payments
 	- Description: Triggers a one-time scan for payment emails and returns matched results.
-	- Query params (optional): `from` (email address, defaults to `ZEFFY_EMAIL` from config), `subject` (defaults to `ZEFFY_SUBJECT`).
-	- Returns: JSON with `count` and `results`.
+	- Query params (optional):
+	  - `from` (email address, defaults to `ZEFFY_EMAIL` from config)
+	  - `subject` (defaults to `ZEFFY_SUBJECT`)
+	  - `since_date` (ISO date string `YYYY-MM-DD`) — if provided, only emails on/after this date will be processed.
+	- Returns: JSON with `count` (number of processed emails) and `results` (array of result objects).
+	  Each result item will typically be one of:
+	  - `{"update_success": false, "message": "...", "email_subject": "..."}` when extraction failed.
+	  - `{"payer_full_name": "...", "amount_of_payment": 150.0, "unique_id": "...", "payment_status": true, "paid": true, "update_success": true}` when payment info was extracted and DB update attempted.
 	- Example:
 
 ```bash
-curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject=Payment+Received"
+curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject=Payment+Received&since_date=2025-10-01"
 ```
 
 Notes:
