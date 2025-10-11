@@ -2,7 +2,7 @@ from flask import current_app
 from datetime import datetime
 import pandas as pd
 from datetime import datetime
-import csv, os
+import os
 
 def save_to_db(collection_name: str, data: dict) -> dict:
     """
@@ -36,11 +36,18 @@ def save_to_csv(data: dict) -> bool:
     """
     cfg = current_app.db
     print(f"Current DB config: {cfg}")
-    df = cfg.get("dataframe")
-    if df is None:
-        print("❌ No dataframe available to save data")
-        return False  
+    csv_path = cfg.get("path")
 
+    if not csv_path or not os.path.exists(os.fspath(csv_path)):
+        print("❌ CSV path missing or file does not exist")
+        return False 
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"❌ Failed to read CSV file: {e}")
+        return False
+    
     rec = {}
     for col in df.columns:
         if col.lower() == "created_at":
@@ -55,43 +62,45 @@ def save_to_csv(data: dict) -> bool:
 
     new_row = pd.DataFrame([rec], columns=df.columns)
     df = pd.concat([df, new_row], ignore_index=True)
-    cfg["dataframe"] = df
 
-    csv_path = cfg.get("path")
+    try:
+        csv_dir = os.path.dirname(os.fspath(csv_path))
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        df.to_csv(csv_path, index=False)
+    except Exception:
+        print("❌ Failed to write to CSV file")
+        return False
     
-    if csv_path:
-        try:
-            csv_dir = os.path.dirname(os.fspath(csv_path))
-            if csv_dir:
-                os.makedirs(csv_dir, exist_ok=True)
-            df.to_csv(csv_path, index=False)
-        except Exception:
-            print("❌ Failed to write to CSV file")
-            return False
     return True
 
 def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     """
-    Update an existing record in the in-memory dataframe or append a new one.
+    Update or append a record in the CSV backing store.
 
-    This function always persists the resulting dataframe to the CSV file
-    path stored in `current_app.db['path']` (if present). The `persist`
-    parameter is accepted for backward compatibility but ignored.
+    Args:
+        data (dict): Fields to update or insert.
+        match_column (str): Column name to match (case-insensitive).
+        match_value: Value to match in the match_column.
 
-    Matching order for update: 'unique_id', '_id', 'created_at' (first match wins).
-    If no matching row is found the record is appended.
+    Returns:
+        bool: True on success, False on missing CSV path or I/O errors.
     """
     cfg = current_app.db
-    df = cfg.get("dataframe")
-    if df is None:
-        print("❌ No dataframe available to update data")
+    csv_path = cfg.get("path")
+    if not csv_path or not os.path.exists(os.fspath(csv_path)):
+        print("❌ CSV path missing or file does not exist")
         return False
-    
-    if match_column not in df.columns:
-        print(f"❌ Match column '{match_column}' not in dataframe columns")
+
+    # Load the latest dataframe from disk
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"❌ Failed to read CSV file: {e}")
         return False
 
     match_index = df.index[df[match_column] == match_value].tolist()
+
     if not match_index:
         print(f"❌ No matching record found for {match_column} = {match_value}")
         return False
@@ -99,23 +108,18 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     match_index = match_index[0]  # take first match
 
     for k, v in data.items():
-        if k not in df.columns:
-            df[k] = ""  # add new column with default empty values
-        df.at[match_index, k] = v
+        if k in df.columns:
+            df.at[match_index, k] = v
 
     df.at[match_index, "updated_at"] = datetime.utcnow().isoformat()
 
-    cfg["dataframe"] = df
-
-    csv_path = cfg.get("path")
-    if csv_path:
-        try:
-            csv_dir = os.path.dirname(os.fspath(csv_path))
-            if csv_dir:
-                os.makedirs(csv_dir, exist_ok=True)
-            df.to_csv(csv_path, index=False)
-        except Exception:
-            print("❌ Failed to write to CSV file")
-            return False
-
+    try:
+        csv_dir = os.path.dirname(os.fspath(csv_path))
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        df.to_csv(csv_path, index=False)
+    except Exception as e:
+        print(f"❌ Failed to write to CSV file: {e}")
+        return False
+    
     return True

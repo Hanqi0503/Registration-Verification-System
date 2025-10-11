@@ -64,7 +64,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             # Step 5: Update CSV database
             print("Updating database...")
-            update_success = update_to_csv(payment_info, match_column="Payer_Full_Name", match_value=payment_info.get("payer_full_name"))
+            update_success = update_to_csv(payment_info, match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
 
             results.append({**payment_info, "update_success": update_success})
 
@@ -116,9 +116,9 @@ def extract_payment_info(email_body: str) -> dict:
     for pattern in name_patterns:
         match = re.search(pattern, email_body, re.IGNORECASE)
         if match:
-            payment_info['payer_full_name'] = match.group(1).strip()
+            payment_info['Payer_Full_Name'] = match.group(1).strip()
             break
-    
+
     # Extract amount (common patterns)
     # Pattern: "$50.00" or "Amount: $50.00" or "50.00 CAD"
     amount_patterns = [
@@ -132,7 +132,7 @@ def extract_payment_info(email_body: str) -> dict:
         match = re.search(pattern, email_body)
         if match:
             amount_str = match.group(1).replace(',', '')
-            payment_info['amount_of_payment'] = float(amount_str)
+            payment_info['Amount_of_Payment'] = float(amount_str)
             break
     
     # Extract unique ID / Transaction ID / Reference number
@@ -146,13 +146,13 @@ def extract_payment_info(email_body: str) -> dict:
     for pattern in id_patterns:
         match = re.search(pattern, email_body, re.IGNORECASE)
         if match:
-            payment_info['unique_id'] = match.group(1).strip()
+            payment_info['Unique_ID'] = match.group(1).strip()
             break
 
     # Set payment status to True (paid) if we found key info
-    if 'payer_full_name' in payment_info and 'amount_of_payment' in payment_info:
-        payment_info['payment_status'] = True
-        payment_info['paid'] = True
+    if 'Payer_Full_Name' in payment_info and 'Amount_of_Payment' in payment_info:
+        payment_info['Payment_Status'] = True
+        payment_info['Paid'] = True
         return payment_info
     else:
         return None
