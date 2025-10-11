@@ -35,10 +35,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
         if not email_ids:
             print("⚠️ No Zeffy payment emails found")
-            return {
-                "status": "no_emails_found",
-                "message": "No payment notification emails found"
-            }
+            return []   
 
         results = []
         # Step 3: Process the most recent email
