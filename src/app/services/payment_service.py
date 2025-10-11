@@ -64,7 +64,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             # Step 5: Update CSV database
             print("Updating database...")
-            update_success = update_to_csv(payment_info, match_column="Full_Name", match_value=payment_info.get("payer_full_name"))
+            update_success = update_to_csv(payment_info, match_column="Payer_Full_Name", match_value=payment_info.get("payer_full_name"))
 
             results.append({**payment_info, "update_success": update_success})
 
@@ -107,10 +107,10 @@ def extract_payment_info(email_body: str) -> dict:
     # Extract payer name (common patterns)
     # Pattern 1: "Name: John Doe" or "Donor: John Doe"
     name_patterns = [
-        r"Name:\s*([A-Za-z\s]+)",
-        r"Donor:\s*([A-Za-z\s]+)",
-        r"From:\s*([A-Za-z\s]+)",
-        r"Payer:\s*([A-Za-z\s]+)"
+        r"Name:\s*([A-Za-z\s]+)(?=\r|\n|$)",
+        r"Donor:\s*([A-Za-z\s]+)(?=\r|\n|$)",
+        r"From:\s*([A-Za-z\s]+)(?=\r|\n|$)",
+        r"Payer:\s*([A-Za-z\s]+)(?=\r|\n|$)"
     ]
     
     for pattern in name_patterns:

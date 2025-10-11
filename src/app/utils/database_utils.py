@@ -35,8 +35,9 @@ def save_to_csv(data: dict) -> bool:
         bool: True on success.
     """
     cfg = current_app.db
+    print(f"Current DB config: {cfg}")
     df = cfg.get("dataframe")
-    if df is None or df.empty:
+    if df is None:
         print("❌ No dataframe available to save data")
         return False  
 
@@ -52,7 +53,12 @@ def save_to_csv(data: dict) -> bool:
             else:
                 rec[col] = ""
 
+    new_row = pd.DataFrame([rec], columns=df.columns)
+    df = pd.concat([df, new_row], ignore_index=True)
+    cfg["dataframe"] = df
+
     csv_path = cfg.get("path")
+    
     if csv_path:
         try:
             csv_dir = os.path.dirname(os.fspath(csv_path))
@@ -77,7 +83,7 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     """
     cfg = current_app.db
     df = cfg.get("dataframe")
-    if df is None or df.empty:
+    if df is None:
         print("❌ No dataframe available to update data")
         return False
     
@@ -96,7 +102,7 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         if k not in df.columns:
             df[k] = ""  # add new column with default empty values
         df.at[match_index, k] = v
-        
+
     df.at[match_index, "updated_at"] = datetime.utcnow().isoformat()
 
     cfg["dataframe"] = df

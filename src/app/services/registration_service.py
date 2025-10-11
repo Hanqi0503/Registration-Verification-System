@@ -60,7 +60,9 @@ def registration_service(data, pr_amount, normal_amount):
     }
 
     # Store extracted data into app database
-    save_to_csv(registration_data)
+    if not save_to_csv(registration_data):
+        print("❌ Failed to save registration data to CSV")
+        return {"status": "error", "message": "Failed to save registration data"}
 
     return registration_data
 
