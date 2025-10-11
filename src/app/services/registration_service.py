@@ -1,4 +1,3 @@
-# app/services/registration_service.py
 from datetime import datetime
 from app.utils.extraction_tools import extract_form_id
 from app.utils.database_utils import save_to_csv

@@ -1,3 +1,4 @@
+# src/app/routes/registration.py
 from flask import Blueprint, request, jsonify
 from app.services.registration_service import registration_service
 
@@ -6,31 +7,25 @@ registration_bp = Blueprint("registration", __name__)
 @registration_bp.route("/jotform-webhook", methods=["POST"])
 def jotform_webhook():
     """
-    Endpoint for JotForm submissions.
-    JotForm will POST form data here.
-    Args:
-        None (data comes from request)
-    Parameters:
-        example: /jotform-webhook?pr_amount=150&normal_amount=100
-        pr_amount (float): Payment amount for PR status, from URL param.
-        normal_amount (float): Payment amount for normal status, from URL param.
-    Returns:
-        JSON response with status and processed data.
+    Accepts JotForm submissions as JSON or form-data.
+    Optional query params to override pricing:
+      ?pr_amount=150&normal_amount=200
     """
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Missing JSON payload"}), 400
+        # accept JSON or form-data
+        payload = request.get_json(silent=True)
+        if not payload:
+            payload = request.form.to_dict(flat=True)
 
-        # Get optional pricing from URL params
-        pr_amount = float(request.args.get("pr_amount"))
-        normal_amount = float(request.args.get("normal_amount"))
+        if not payload:
+            return jsonify({"error": "Missing payload (JSON or form-data)"}), 400
 
-        if not pr_amount and not normal_amount:
-            return jsonify({"error": "Missing pricing parameters"}), 400
-        
-        result = registration_service(data, pr_amount, normal_amount)
+        # pricing with safe defaults
+        pr_amount = float(request.args.get("pr_amount", 150))
+        normal_amount = float(request.args.get("normal_amount", 200))
+
+        result = registration_service(payload, pr_amount, normal_amount)
         return jsonify({"message": "Processed successfully", "result": result}), 200
-    
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
