@@ -1,5 +1,8 @@
 from flask import current_app
 from datetime import datetime
+import pandas as pd
+from datetime import datetime
+import os
 
 def save_to_db(collection_name: str, data: dict) -> dict:
     """
@@ -23,34 +26,100 @@ def save_to_db(collection_name: str, data: dict) -> dict:
 
 def save_to_csv(data: dict) -> bool:
     """
-    Save a record to a CSV file.
+    Append a single record to the CSV file defined in current_app.db['path'].
 
     Args:
         data (dict): The data to be saved.
 
     Returns:
-        Boolean
+        bool: True on success.
     """
+    cfg = current_app.db
+    print(f"Current DB config: {cfg}")
+    csv_path = cfg.get("path")
+
+    if not csv_path or not os.path.exists(os.fspath(csv_path)):
+        print("❌ CSV path missing or file does not exist")
+        return False 
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"❌ Failed to read CSV file: {e}")
+        return False
+    
+    rec = {}
+    for col in df.columns:
+        if col.lower() == "created_at":
+            rec[col] = data.get(col, datetime.utcnow().isoformat())
+        else:
+            if col in data:
+                rec[col] = data[col]
+            elif col.lower() in data:
+                rec[col] = data[col.lower()]
+            else:
+                rec[col] = ""
+
+    new_row = pd.DataFrame([rec], columns=df.columns)
+    df = pd.concat([df, new_row], ignore_index=True)
+
+    try:
+        csv_dir = os.path.dirname(os.fspath(csv_path))
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        df.to_csv(csv_path, index=False)
+    except Exception:
+        print("❌ Failed to write to CSV file")
+        return False
+    
     return True
-    # Assigned to Jay
-    # Please implement the CSV saving logic here
-    # Please using current_app.db because app.db = init_csv() in app.__init__.py
-    # So you can check the logic in init_csv() function in app.services.database
-        
 
-def update_to_csv(data: dict) -> bool:
+def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     """
-    Update a record to a CSV file.
+    Update or append a record in the CSV backing store.
 
-     Args:
-        data (dict): The data to be saved.
+    Args:
+        data (dict): Fields to update or insert.
+        match_column (str): Column name to match (case-insensitive).
+        match_value: Value to match in the match_column.
 
     Returns:
-        Boolean
+        bool: True on success, False on missing CSV path or I/O errors.
     """
-    return True
+    cfg = current_app.db
+    csv_path = cfg.get("path")
+    if not csv_path or not os.path.exists(os.fspath(csv_path)):
+        print("❌ CSV path missing or file does not exist")
+        return False
 
-    # Assigned to Jay
-    # Please implement the CSV saving logic here
-    # Please using current_app.db because app.db = init_csv() in app.__init__.py
-    # So you can check the logic in init_csv() function in app.services.database
+    # Load the latest dataframe from disk
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"❌ Failed to read CSV file: {e}")
+        return False
+
+    match_index = df.index[df[match_column] == match_value].tolist()
+
+    if not match_index:
+        print(f"❌ No matching record found for {match_column} = {match_value}")
+        return False
+    
+    match_index = match_index[0]  # take first match
+
+    for k, v in data.items():
+        if k in df.columns:
+            df.at[match_index, k] = v
+
+    df.at[match_index, "updated_at"] = datetime.utcnow().isoformat()
+
+    try:
+        csv_dir = os.path.dirname(os.fspath(csv_path))
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        df.to_csv(csv_path, index=False)
+    except Exception as e:
+        print(f"❌ Failed to write to CSV file: {e}")
+        return False
+    
+    return True

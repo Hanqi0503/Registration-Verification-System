@@ -53,4 +53,4 @@ def init_csv(file_path: Optional[str] = None):
         df = pd.read_csv(path)
         print(f"✅ Loaded existing CSV file from {path}")
 
-    return {"path": path, "dataframe": df}
+    return {"path": path}
