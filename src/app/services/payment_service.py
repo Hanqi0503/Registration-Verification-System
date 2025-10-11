@@ -64,7 +64,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             # Step 5: Update CSV database
             print("Updating database...")
-            update_success = update_to_csv(payment_info)
+            update_success = update_to_csv(payment_info, match_column="Full_Name", match_value=payment_info.get("payer_full_name"))
 
             results.append({**payment_info, "update_success": update_success})
 
