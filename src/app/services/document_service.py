@@ -5,7 +5,15 @@ from app.models import IdentificationResult
 from app.utils.image_utils import ninja_image_to_text, local_image_to_text,get_image,normalize
 
 # ------------------------------------------------------------
-# ✅ Keyword sets
+# Thresholds
+# ------------------------------------------------------------
+
+PR_CARD_KEYWORD_THRESHOLD = 0.5
+PR_CARD_POSITION_THRESHOLD = 0.5
+PR_CARD_DRIVERS_LICENSE_THRESHOLD = 0.5
+
+# ------------------------------------------------------------
+# Keyword sets
 # ------------------------------------------------------------
 
 PR_CONF_LETTER_KEYWORDS = [
@@ -16,7 +24,7 @@ PR_CONF_LETTER_KEYWORDS = [
 ]
 
 # ------------------------------------------------------------
-# ✅ Helper functions
+# Helper functions
 # ------------------------------------------------------------
 def _relative_position_rules(normalized_results) -> float:
     gov_items = [b for b in normalized_results if b["text"] in ["govemment", "gouvemement", "government","gouvernement","goverment"]]
@@ -119,15 +127,15 @@ def identification_service(image_url: str) -> IdentificationResult:
         else:
             valid = False
             # 🚫 Generic Photo ID
-            if keyword_confidence < 0.5:
+            if keyword_confidence < PR_CARD_KEYWORD_THRESHOLD:
                 reasons.append(f"PR Card Keyword found confidence is lower than the threshold.")
                 doc.append("Generic_Photo_ID")
             # 🚫 Handwritten
-            if relative_position_confidence < 0.5:
+            if relative_position_confidence < PR_CARD_POSITION_THRESHOLD:
                 doc.append("HANDWRITTEN")
                 reasons += ["Very little structured text; likely hand-written note"]
             # 🚫 Driver’s License
-            if drive_license_confidence >= 0.5:
+            if drive_license_confidence >= PR_CARD_DRIVERS_LICENSE_THRESHOLD:
                 doc = "DRIVERS_LICENSE"
                 reasons += [f"Driver’s licence cues (score={drive_license_confidence})"]
 
