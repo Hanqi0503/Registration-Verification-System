@@ -1,27 +1,135 @@
 from io import BytesIO
-from typing import Union
+from typing import Union, Optional
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image
+import cv2
+import pytesseract
+from io import BytesIO
+import numpy as np
 
 from app.config.config import Config
 
-def ninja_image_to_text(imgURL):
+def normalize(ocr_results, img_width: int, img_height: int) -> list:
+    normalized_results = []
+    for item in ocr_results:
+        box = item["bounding_box"]
+        normalize_item = {}
+        normalize_item["x1_norm"] = box["x1"] / img_width
+        normalize_item["y1_norm"] = box["y1"] / img_height
+        normalize_item["x2_norm"] = box["x2"] / img_width
+        normalize_item["y2_norm"] = box["y2"] / img_height
+        normalize_item["center_y"] = (normalize_item["y1_norm"] + normalize_item["y2_norm"]) / 2
+        normalize_item["center_x"] = (normalize_item["x1_norm"] + normalize_item["x2_norm"]) / 2
+        normalize_item['text'] = item["text"].strip().lower()
+        normalized_results.append(normalize_item)
+    return normalized_results
+
+def bytes_to_cv2(image_bytes: bytes) -> np.ndarray:
+    """
+    Decode image bytes to an OpenCV BGR ndarray.
+    Falls back to PIL if cv2.imdecode fails.
+    """
+    arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        # fallback via PIL -> RGB -> BGR
+        pil = Image.open(BytesIO(image_bytes)).convert("RGB")
+        img = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+    return img
+
+def get_image(source = 'URL', imgURL = None, imgPath = None):
+    """
+    Fetch image from URL or local path.
+
+    Args:
+        source (str): 'URL' or 'PATH' to indicate image source type.
+        imgURL (str): URL of the image (if source is 'URL').
+        imgPath (str): Local file path of the image (if source is not 'URL').
+
+    Returns:
+        The image as a NumPy array.
+    """
+    print(f"Fetching image from {source}...")
+    if source == 'URL':
+        image_bytes = fetch_image_bytes(imgURL)
+        image = bytes_to_cv2(image_bytes)
+    else:
+        image = cv2.imread(imgPath)
+
+    return image
+
+def local_image_to_text(image):
+    """
+    Converts the image at img_url to text using the Tesseract OCR engine.
+    Args:
+        image: The image as a NumPy array or bytes.
+    Returns:
+        list:  OCR results with text and bounding boxes.
+    """
+
+    image = image_preprocess(image)
+
+    boxes = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+
+    ocr_result = []
+    for i, word in enumerate(boxes["text"]):
+        x, y, w, h = boxes['left'][i], boxes['top'][i], boxes['width'][i], boxes['height'][i]
+        #rel_x = x - cx1
+        #rel_y = y - cy1
+
+        item = {
+            "text": word.strip(),
+            "bounding_box": {
+                "x1": x,
+                "y1": y,
+                "x2": x + w,
+                "y2": y + h,
+            }
+        }
+        ocr_result.append(item)
+
+    return ocr_result
+
+def ninja_image_to_text(image):
     """
     Converts the image at img_url to text using the API.
+    Args:
+        image: The image as a NumPy array or bytes.
+    Returns:
+        list: OCR results with text and bounding boxes. 
     """
-    image = fetch_image_bytes(imgURL)
 
-    files = {'image': image}
+    image = image_preprocess(image)
+
+    if isinstance(image, np.ndarray):
+        image = np.ascontiguousarray(image)
+        ok, buf = cv2.imencode('.jpg', image)
+        if not ok:
+            raise RuntimeError("Failed to encode image for OCR API")
+        image_bytes = buf.tobytes()
+    elif isinstance(image, bytes):
+        image_bytes = image
+    elif isinstance(image, Image.Image):
+        bio = BytesIO()
+        image.save(bio, format='JPEG')
+        image_bytes = bio.getvalue()
+    else:
+        # fallback: try reading imgPath if provided
+        raise RuntimeError("No image bytes available for OCR API call")
+
+    files = {'image': ('image.jpg', BytesIO(image_bytes), 'image/jpeg')}
 
     headers = {
         'X-Api-Key': Config.NINJA_API_KEY
     }
 
     r = requests.post(Config.NINJA_API_URL, files=files, headers=headers)
-    return r.json()
+    ocr_result = r.json()
 
-def extract_image_url(html_content: Union[str, bytes]) -> str:
+    return ocr_result
+
+def extract_image_url(html_content: Union[str, bytes]) ->  Optional[str]:
     """
     Extract the first image `src` URL found in the provided HTML content.
 
@@ -39,7 +147,6 @@ def extract_image_url(html_content: Union[str, bytes]) -> str:
     if img_tag and img_tag.get('src'):
         return img_tag['src']
     raise ValueError("No image URL found in the provided HTML.")
-
 
 def fetch_image_bytes(image_url: str) -> bytes:
     """
@@ -104,3 +211,30 @@ def fetch_image_bytes(image_url: str) -> bytes:
         return buf.getvalue()
 
     raise ValueError(f"Unable to handle content type: {content_type}")
+
+def image_preprocess(img: cv2.Mat) -> cv2.Mat:
+    cropped = None
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    edges = cv2.Canny(gray, 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    possible_cards = []
+
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        area = w * h
+        ratio = w / float(h)
+        # 85mm x 54mm ≈ 1.57
+        if 1.47 < ratio < 1.67 and area > 10000:  
+            possible_cards.append((x, y, w, h))
+    
+    # Choose the biggest area
+    if possible_cards:
+        x, y, w, h = max(possible_cards, key=lambda b: b[2]*b[3])
+        cropped = img[y:y+h,x:x+w]
+    else:
+        print("❌ Cannot find card-like area")
+        cropped = gray
+    return cropped
