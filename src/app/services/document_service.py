@@ -3,7 +3,7 @@ from typing import Dict, List, Any
 
 from app.models import IdentificationResult
 from app.utils.image_utils import ninja_image_to_text, local_image_to_text,get_image,normalize
-
+from app.utils.database_utils import update_to_csv
 # ------------------------------------------------------------
 # Thresholds
 # ------------------------------------------------------------
@@ -101,6 +101,20 @@ def _keyword_in_drivers_license(normalized_results) -> float:
     confidence = round(score / len(checks), 2)
     return confidence
 
+def _get_id_number(texts: List[str]) -> str:
+    for t in texts:
+        match = re.search(r"\d{4}-\d{4}", t)
+        if match:
+            return match.group(0)
+    return ""
+
+def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[str, Any]:
+    pr_card_verified_info  = {}
+    pr_card_verified_info['PR_Card_Valid'] = valid
+    pr_card_verified_info['PR_Card_Valid_Confidence'] = confidence
+    pr_card_verified_info['PR_Card_Details'] = details
+    return pr_card_verified_info
+
 # ------------------------------------------------------------
 # Main validator
 # ------------------------------------------------------------
@@ -111,19 +125,20 @@ def identification_service(image_url: str) -> IdentificationResult:
     reasons: List[str] = []
     doc: List[str] = []
     valid = False
+    mixed_score = 0.0
     try:
         relative_position_confidence = _relative_position_rules(norm)
         keyword_confidence = _keyword_in_ocr(norm)
         drive_license_confidence = _keyword_in_drivers_license(norm)
+         
         # ✅ PR Card
         mixed_score = (keyword_confidence + relative_position_confidence) / 2
         print("Mixed Score:", mixed_score)
         if mixed_score >= 0.55 and drive_license_confidence < 0.5:
+            # ! In the future, we will also verify the PR Card number is corresponding to jotform input.
             reasons.append(f"PR Card Check confidence is higher than the threshold.")
             doc.append("PR_CARD")
             valid = True
-            
-            return IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=[item["text"] for item in norm])
         else:
             valid = False
             # 🚫 Generic Photo ID
@@ -138,13 +153,28 @@ def identification_service(image_url: str) -> IdentificationResult:
             if drive_license_confidence >= PR_CARD_DRIVERS_LICENSE_THRESHOLD:
                 doc = "DRIVERS_LICENSE"
                 reasons += [f"Driver’s licence cues (score={drive_license_confidence})"]
-
-            conf = max(keyword_confidence, relative_position_confidence, drive_license_confidence)
-            return IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=conf, raw_text=[item["text"] for item in norm])
+        
+        raw_texts = [item["text"] for item in norm]
+        pr_card_id = _get_id_number(raw_texts) 
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=raw_texts)
+        
+        update_success = False
+    
+        if pr_card_id and valid:
+            card_info = _get_pr_card_verified_info(valid, mixed_score, reasons)
+            update_success = update_to_csv(card_info, match_column="PR_Card_Number", match_value=pr_card_id)
+            if update_success:
+                print("✅ Database updated successfully!")
+            else:
+                print("⚠️ Database update failed")
+        result = {**identification_result.__dict__, "update_success": update_success, "PR_Card_Number": pr_card_id}
+        return result
     except Exception as e:
         # ❓ Unknown
         reasons += [str(e)]
-        return IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=[item["text"] for item in norm])
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=[item["text"] for item in norm])
+        result = {**identification_result.__dict__, "update_success": False}
+        return result
 
     # ✅ Confirmation of PR
     '''if copr >= 2:
