@@ -24,7 +24,7 @@ def save_to_db(collection_name: str, data: dict) -> dict:
     print(f"✅ Saved record to '{collection_name}' with ID {data['_id']}")
     return data
 
-def save_to_csv(data: dict) -> bool:
+def add_to_csv(data: dict) -> bool:
     """
     Append a single record to the CSV file defined in current_app.db['path'].
 
@@ -123,3 +123,34 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         return False
     
     return True
+
+def get_from_csv(match_column: str, match_value):
+    """
+    Retrieve a record from the CSV backing store.
+
+    Args:
+        match_column (str): Column name to match (case-insensitive).
+        match_value: Value to match in the match_column.
+
+    Returns:
+        dict | None: The matching record as a dictionary, or None if not found.
+    """
+    cfg = current_app.db
+    csv_path = cfg.get("path")
+    if not csv_path or not os.path.exists(os.fspath(csv_path)):
+        print("❌ CSV path missing or file does not exist")
+        return None
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"❌ Failed to read CSV file: {e}")
+        return None
+
+    match_rows = df[df[match_column] == match_value]
+
+    if match_rows.empty:
+        print(f"❌ No matching record found for {match_column} = {match_value}")
+        return None
+
+    return match_rows.to_dict(orient='records')

@@ -1,5 +1,5 @@
 from app.utils.extraction_tools import extract_form_id
-from app.utils.database_utils import save_to_csv
+from app.utils.database_utils import add_to_csv
 
 def registration_service(data, pr_amount, normal_amount):
     """
@@ -60,7 +60,7 @@ def registration_service(data, pr_amount, normal_amount):
     }
 
     # Store extracted data into app database
-    if not save_to_csv(registration_data):
+    if not add_to_csv(registration_data):
         print("❌ Failed to save registration data to CSV")
         return {"status": "error", "message": "Failed to save registration data"}
 
