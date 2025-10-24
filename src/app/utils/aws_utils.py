@@ -1,6 +1,10 @@
+from io import BytesIO
 import boto3
+import cv2
+import numpy as np
+from PIL import Image
 from app.config.config import Config
-from app.utils.image_utils import fetch_image_bytes
+from app.utils.image_utils import image_preprocess
 class AWSService:
     """
     AWS Service class to handle interactions with AWS services like S3 and AWS Textract.
@@ -98,23 +102,63 @@ class AWSService:
             },
             ExpiresIn=expiration
         )
+    
+    def textract_to_items(self, response, img_width: int, img_height: int) -> list:
+        items = []
+        for block in response.get('Blocks', []):
+            if block['BlockType'] == 'LINE':
+                text = block.get('Text', '').strip()
+                bbox = block.get('Geometry', {}).get('BoundingBox', {})
+                left = bbox.get("Left", 0.0)
+                top = bbox.get("Top", 0.0)
+                width = bbox.get("Width", 0.0)
+                height = bbox.get("Height", 0.0)
+                if text and bbox and width > 0 and height > 0:
+                    items.append({
+                        'text': text,
+                        'confidence': block.get('Confidence', 0),
+                        'bounding_box': {
+                            'x1': int(left * img_width),
+                            'y1': int(top * img_height),
+                            'x2': int((left + width) * img_width),
+                            'y2': int((top + height) * img_height)
+                        }
+                    })
+        return items
 
-    def extract_text_from_image(self, imgURL):
+    def extract_text_from_image(self, image):
         """
-        Converts the image at img_url to text using aws textract.
+        Converts the image at image to text using aws textract.
         Args:
-            imgURL (str): URL of the image to process.
+            image: cv2 image.
         Returns:
-            list: List of detected text elements.
+            list: List of detected text elements and corresponding normalized bounding boxes.
         """
 
-        image = fetch_image_bytes(imgURL)
+        image = image_preprocess(image)
+        image_width = image.shape[1]
+        image_height = image.shape[0]
+
+        if isinstance(image, np.ndarray):
+            image = np.ascontiguousarray(image)
+            ok, buf = cv2.imencode('.jpg', image)
+            if not ok:
+                raise RuntimeError("Failed to encode image for OCR API")
+            image_bytes = buf.tobytes()
+        elif isinstance(image, bytes):
+            image_bytes = image
+        elif isinstance(image, Image.Image):
+            bio = BytesIO()
+            image.save(bio, format='JPEG')
+            image_bytes = bio.getvalue()
+        else:
+            # fallback: try reading imgPath if provided
+            raise RuntimeError("No image bytes available for OCR API call")
 
         response = self.textract.detect_document_text(
-            Document={'Bytes': image}
+            Document={'Bytes': image_bytes}
         )
         
-        result = [{'text': word} for block in response['Blocks'] if block['BlockType'] == 'LINE'
-                for word in block.get('Text', '').split()]
+        result = self.textract_to_items(response, image_width, image_height)
     
         return result
