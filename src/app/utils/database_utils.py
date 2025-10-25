@@ -123,3 +123,27 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         return False
     
     return True
+
+# File: database_utils.py (Add this function)
+
+def update_pr_status(registration_id: str, data: dict) -> bool:
+    """
+    Updates the PR verification status and details in the CSV store.
+    This function wraps update_to_csv, matching by registration_id.
+
+    Args:
+        registration_id (str): The unique ID of the record to match.
+        data (dict): The fields (like pr_status, message) to update.
+
+    Returns:
+        bool: True on success.
+    """
+    # The registration_id must be matched against a column containing the ID (e.g., 'Form_ID' or 'registration_id')
+    # For this function to work correctly, your CSV must have a column named 'registration_id'
+    
+    # We pass the update task to the general update function
+    return update_to_csv(
+        data=data, 
+        match_column="registration_id", 
+        match_value=registration_id
+    )
