@@ -28,31 +28,36 @@ PR_CONF_LETTER_KEYWORDS = [
 # Helper functions
 # ------------------------------------------------------------
 def _relative_position_rules(normalized_results) -> float:
-    gov_items = [b for b in normalized_results if b["text"] in ["govemment", "gouvemement", "government","gouvernement","goverment"]]
-    canada_boxes = [b for b in normalized_results if "canada" in b["text"]]
-    perm_boxes = [b for b in normalized_results if "permanent" in b["text"]]
+    gov_items = []
+    canada_boxes = []
+    perm_boxes = []
 
-     # --- 1️⃣ Find all "govemment" and "canada" entries ---
+    for item in normalized_results:
+        if re.search(r'government', item["text"], re.IGNORECASE) or \
+           re.search(r'gouvernement', item["text"], re.IGNORECASE):
+            gov_items.append(item)
+        if re.search(r'canada', item["text"], re.IGNORECASE):
+            canada_boxes.append(item)
+        if re.search(r'permanent', item["text"], re.IGNORECASE):
+            perm_boxes.append(item)
+
+     # --- 1️⃣ Find all "government" and "canada" entries ---
     gov_valid = False
     gov_ref_y = None
     for g in gov_items:
-        if g["center_y"] < 0.15 and g["center_x"] < 0.4:
+        if g["center_y"] < 0.15:
             gov_valid = True
             gov_ref_y = g["center_y"]
             break
-    # -- Debug --
-    print("All gov items:")
-    print(gov_items)
+
     # --- 2️⃣ Check bottom-right Canada position ---
     bottom_canada = max(canada_boxes, key=lambda b: b["center_y"], default=None)
     canada_valid = False
     if bottom_canada:
         if bottom_canada["center_y"] > 0.8 and bottom_canada["center_x"] > 0.7:
             canada_valid = True
-    # -- Debug --
-    print("All canada items:")
-    print(canada_boxes)
-    # --- 3️⃣ Check "permanent" below govemment ---
+   
+    # --- 3️⃣ Check "permanent" below government ---
     perm_valid = False
     if gov_ref_y and perm_boxes:
         tolerance = 0.03  # allow small vertical variation (~3% of image height)
@@ -60,9 +65,6 @@ def _relative_position_rules(normalized_results) -> float:
             if abs(p["center_y"] - gov_ref_y) < tolerance:
                 perm_valid = True
                 break
-    # -- Debug --
-    print("All permanent items:")
-    print(perm_boxes)
 
     score = 0
 
@@ -158,28 +160,25 @@ def identification_service(image_url: str, full_name: str = "", card_number: str
         relative_position_confidence = _relative_position_rules(norm)
          
         # ✅ PR Card
-        mixed_score = (keyword_confidence + relative_position_confidence) / 2
-        print("Mixed Score:", mixed_score)
-
-        if mixed_score >= 0.55 and drive_license_confidence < 0.5:
-            # ! In the future, we will also verify the PR Card number is corresponding to jotform input.
-            reasons.append(f"PR Card Check confidence is higher than the threshold.")
-            doc.append("PR_CARD")
+        if keyword_confidence > PR_CARD_KEYWORD_THRESHOLD:
             valid = True
-        else:
-            valid = False
-            # 🚫 Generic Photo ID
-            if keyword_confidence < PR_CARD_KEYWORD_THRESHOLD:
-                reasons.append(f"PR Card Keyword found confidence is lower than the threshold.")
-                doc.append("Generic_Photo_ID")
+            reasons.append(f"PR Card Check confidence is higher than the threshold.")
             # 🚫 Handwritten
             if relative_position_confidence < PR_CARD_POSITION_THRESHOLD:
                 doc.append("HANDWRITTEN")
                 reasons += ["Very little structured text; likely hand-written note"]
+                valid = False
             # 🚫 Driver’s License
             if drive_license_confidence >= PR_CARD_DRIVERS_LICENSE_THRESHOLD:
                 doc = "DRIVERS_LICENSE"
                 reasons += [f"Driver’s licence cues (score={drive_license_confidence})"]
+                valid = False
+        # 🚫 Generic Photo ID
+        else:
+            reasons.append(f"PR Card Keyword found confidence is lower than the threshold.")
+            doc.append("Generic_Photo_ID")
+            valid = False
+        
 
         # 1. Get ID Info and Name if give full_name and card_number, making card_number not null if there is fullname
         # 1.1 Return both name and number, correct
@@ -195,6 +194,7 @@ def identification_service(image_url: str, full_name: str = "", card_number: str
         if full_name and card_number:
             id_info = _get_id_info(texts, full_name, card_number)
             if "full_name" not in id_info or "id_number" not in id_info:
+                notify_manually_check = True
                 reasons.append(f"Full name or ID number does not match the input.")
                 valid = False
         else:
