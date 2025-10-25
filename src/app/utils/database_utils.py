@@ -111,7 +111,7 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         if k in df.columns:
             df.at[match_index, k] = v
 
-    df.at[match_index, "updated_at"] = datetime.utcnow().isoformat()
+    df.at[match_index, "Updated_At"] = datetime.utcnow().isoformat()
 
     try:
         csv_dir = os.path.dirname(os.fspath(csv_path))

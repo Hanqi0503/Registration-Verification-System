@@ -22,6 +22,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
     gmail_user = Config.ADMIN_EMAIL_USER
     gmail_pass = Config.ADMIN_EMAIL_PASSWORD
 
+    notify_manually_check = False
     try:
         # Step 1: Connect to Gmail
         print(f"Connecting to Gmail as {gmail_user}...")
@@ -78,10 +79,8 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             results.append({**payment_info, "update_success": update_success})
 
-            if update_success:
-                print("✅ Database updated successfully!")
-            else:
-                print("⚠️ Database update failed")
+            if not payment_info['Payment_Status'] or not update_success:
+                notify_manually_check = True
 
         # Step 6: Close Gmail connection
         imap.close()

@@ -37,9 +37,10 @@ Registration-Verification-System/
 │       ├── config/config.py  # Config class that loads .env via python-dotenv
 │       ├── routes/           # Flask blueprints (registration, payment)
 │       ├── services/         # business logic + db helpers
+│       ├── models/           # dataclasses 
 │       └── background/       # scheduler jobs (payment_watcher)
 └── data/
-	└── registration_data.csv # CSV store (created/loaded automatically)
+    └── registration_data.csv # CSV store (created/loaded automatically)
 ```
 
 ## Setup (local development)
@@ -163,44 +164,66 @@ curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amo
 curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject=Payment+Received&since_date=2025-10-01"
 ```
 
-Notes:
-- The Blueprints are registered in `src/app/routes/__init__.py` and mounted at `/api`.
-- Handlers return JSON and appropriate HTTP status codes for error cases.
+- POST /api/check-identification
+	- Description: Submit an image for PR Card. The endpoint currently expects a JSON body with an `image_url` pointing to the image to analyze. The service will fetch the image, run OCR and heuristics, and return an identification result.
+	- Body (application/json):
+	  - `image_url` (string, required) — public URL pointing to the image to analyze. Example values: a direct image link (`https://.../image.jpg`) or a hosting URL that contains an `<img>` tag (the helper will extract the first image found).
+	- Returns: JSON representation of the `IdentificationResult` dataclass with the following fields:
+	  - `doc_type` (array of string): candidate document types detected (e.g. `["PR_CARD"]`).
+	  - `is_valid` (boolean): whether the document is considered a valid match.
+	  - `confidence` (float): confidence score between 0.0 and 1.0.
+	  - `reasons` (array of string): human-readable reasons / cues used for the decision.
+	  - `raw_text` (array of string): OCR-extracted text lines / tokens used by the heuristics.
+	- Example request (curl):
+
+```bash
+curl -X POST "http://127.0.0.1:5050/api/check-identification" \
+  -H "Content-Type: application/json" \
+  -d '{"image_url": "https://example.com/path/to/document.jpg"}'
+```
+
+	- Example response (200):
+
+```json
+{
+  "doc_type": ["PR_CARD"],
+  "is_valid": true,
+  "confidence": 0.78,
+  "reasons": ["PR Card Check confidence is higher than the threshold."],
+  "raw_text": ["canada", "permanent", "resident", "name", "doe, jane"]
+}
+```
 
 ## Image utilities & OCR
 
-This project includes small helpers for downloading images and performing OCR using an external "image to text" API. They live under `src/app/utils/image_utils.py` and the main helpers are:
+The helpers in `src/app/utils/image_utils.py` are small, composable building blocks used in sequence depending on your input source (URL or local file). They handle HTML pages that embed images, convert image bytes to OpenCV arrays, and provide both local (Tesseract) and remote (Ninja OCR) OCR paths.
 
-- `fetch_image_bytes(image_url: str) -> bytes`
-	- Downloads an image from `image_url` and returns the raw bytes.
-	- If the URL points to an HTML page, the helper will parse the page and extract the first `<img src=...>` it finds and then download that image instead.
-	- If `JOTFORM_API_KEY` is set in your `.env`, the function will append it as a query parameter when requesting JotForm-hosted image URLs.
+Typical workflows
 
-- `extract_image_url(html_content: str | bytes) -> str`
-	- Parses HTML content and returns the first `<img>` `src` value found. Raises `ValueError` if none found.
+- URL → remote OCR
+  1. Call `get_image(source='URL', imgURL=...)` downloads image bytes and use the module's `bytes_to_cv2` helper to convert bytes to an OpenCV ndarray. If the URL returns HTML, the helper extracts the first `<img>` and follows it. If `JOTFORM_API_KEY` is set it will be appended to JotForm-hosted URLs.
+  2. Preprocess/crop with `image_preprocess` to do edge detection and grayscale.
+  3. Call `ninja_image_to_text(image_or_bytes)` to send the image to the remote OCR endpoint (requires `NINJA_API_KEY`).
 
-- `ninja_image_to_text(img_url: str) -> dict`
-	- Convenience wrapper that downloads image bytes (via `fetch_image_bytes`) then calls the configured `NINJA_API_URL` with header `X-Api-Key: <NINJA_API_KEY>` and returns the parsed JSON result.
-	- Requires `NINJA_API_KEY` set in `.env` when you call it.
+- URL → local OCR (Tesseract)
+  1. Load with `get_image(source='PATH', imgPath=...)`.
+  2. Preprocess/crop with `image_preprocess` to do edge detection and grayscale.
+  3. Call `local_image_to_text(image_array)` which uses `pytesseract` for OCR.
 
-Example usage (Python):
-
-```python
-from app.utils.image_utils import fetch_image_bytes, ninja_image_to_text
-
-# download raw bytes
-img_bytes = fetch_image_bytes('https://example.com/path/to/image.jpg')
-
-# send image to OCR service
-ocr_result = ninja_image_to_text('https://example.com/path/to/image.jpg')
-print(ocr_result)
-```
+Notes
+- `ninja_image_to_text` accepts a NumPy ndarray, raw bytes, or a PIL Image — it encodes to JPEG before sending to the remote API. Ensure `NINJA_API_KEY` is set in `.env` when using the remote service.
 
 Dependencies
 - These helpers use the following third-party packages; ensure they are installed in your environment (they are listed in `pyproject.toml`):
-	- `requests` (HTTP requests)
-	- `beautifulsoup4` (HTML parsing, provides `bs4`)
-	- `pillow` (PIL, for fallback image decoding)
+	- `requests` — HTTP requests
+	- `beautifulsoup4` (`bs4`) — HTML parsing
+	- `pillow` (`PIL`) — image decoding/fallback
+	- `numpy` — array / ndarray handling
+	- `opencv-python` (imported as `cv2`) — image processing and computer vision
+	- `pytesseract` — Python wrapper for the Tesseract OCR engine
+
+Additional system dependency:
+- Tesseract OCR binary (required by `pytesseract`). Install on macOS with `brew install tesseract` or on Debian/Ubuntu with `sudo apt install tesseract-ocr`.
 
 
 ## Development tips & common troubleshooting

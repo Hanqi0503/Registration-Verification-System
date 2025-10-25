@@ -1,5 +1,6 @@
-from app.utils.extraction_tools import extract_form_id
+from app.utils.extraction_tools import extract_form_id, extract_submission_id
 from app.utils.database_utils import add_to_csv
+from app.utils.file_utils import process_file_uploads
 
 def registration_service(data, pr_amount, normal_amount):
     """
@@ -13,10 +14,9 @@ def registration_service(data, pr_amount, normal_amount):
     Returns:
         dict: Extracted and processed data.
     """
-    # Extract form ID from slug
-    form_id = extract_form_id(data.get("slug", ""))
 
     # Define constants for keys
+    FORM_ID = "slug"
     NAME = "q6_legalName"
     FIRST = "first"
     LAST = "last"
@@ -26,7 +26,11 @@ def registration_service(data, pr_amount, normal_amount):
     PAYER_NAME = "q26_payersName"
     TYPE_OF_STATUS = "q29_areYou"
     PR_CARD_NUMBER = "q11_prCard"
-    CLEAR_FRONT = "clearFront"
+    PR_CARD_URL = "clearFront"
+    E_TRANSFER_URL = "uploadEtransfer"
+
+    # Extract form ID from slug
+    form_id = extract_form_id(data.get(FORM_ID, ""))
 
     # Extract personal information
     full_name = f"{data[NAME][FIRST]} {data[NAME][LAST]}"
@@ -36,8 +40,8 @@ def registration_service(data, pr_amount, normal_amount):
     type_of_status = data.get(TYPE_OF_STATUS)
 
     if "Yes I am" in type_of_status:
-        pr_file_upload_urls = data.get(CLEAR_FRONT) \
-                                if isinstance(data.get(CLEAR_FRONT), list) \
+        pr_file_upload_urls = data.get(PR_CARD_URL) \
+                                if isinstance(data.get(PR_CARD_URL), list) \
                                 else []
         pr_status = True
         pr_card_number = data.get(PR_CARD_NUMBER)
@@ -53,12 +57,17 @@ def registration_service(data, pr_amount, normal_amount):
         'Phone_Number': phone_number,
         'PR_Status': pr_status,
         'PR_Card_Number': pr_card_number if pr_status else None,
-        'PR_File_Upload_URLs': pr_file_upload_urls if pr_status else None,
         'Amount_of_Payment': amount_of_payment,
+        'PR_File_Upload_URLs': pr_file_upload_urls if pr_status else None,
         'Payer_Full_Name': payer_full_name,
-        'Zeffy_Unique_ID': "UNIQUE_ID" # Here need to check with CSMO IF WE CAN HAVE THIS
     }
 
+    if E_TRANSFER_URL in data:
+        e_transfer_file_upload_urls = process_file_uploads(data, E_TRANSFER_URL)
+        submission_id = extract_submission_id(e_transfer_file_upload_urls)
+        registration_data['E_Transfer_File_Upload_URLs'] = e_transfer_file_upload_urls
+        registration_data['Submission_ID'] = submission_id
+    
     # Store extracted data into app database
     if not add_to_csv(registration_data):
         print("❌ Failed to save registration data to CSV")

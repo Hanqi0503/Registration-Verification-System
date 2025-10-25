@@ -1,2 +1,1 @@
-Form_ID,Full_Name,Email,Phone_Number,PR_Status,PR_Card_Number,PR_File_Upload_URLs,Amount_of_Payment,Actual_Paid_Amount,Payer_Full_Name,Unique_ID,Paid,Payment_Status,Created_At,Updated_At,updated_at
-,YuYing Wu3,yuying.wu@example.com,+1 647 123 4567,False,,,100.0,150.0,YuYing Wu,12345,True,False,2025-10-21T18:09:02.106873,,2025-10-21T18:12:15.389852
+Form_ID,Full_Name,Email,Phone_Number,PR_Status,PR_Card_Number,PR_File_Upload_URLs,Amount_of_Payment,Actual_Paid_Amount,Payer_Full_Name,Unique_ID,Paid,Payment_Status,Created_At,Updated_At,PR_Card_Valid,PR_Card_Valid_Confidence,PR_Card_Details
