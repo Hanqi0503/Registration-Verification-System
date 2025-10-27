@@ -2,6 +2,11 @@ from datetime import date, datetime
 import imaplib
 import email
 from email.header import decode_header
+from flask import render_template
+
+from flask_mail import Message
+
+from app import mail
 
 def connect_gmail(username: str, app_password: str):
     """
@@ -67,3 +72,54 @@ def fetch_email(imap, email_id):
         body = msg.get_payload(decode=True).decode(errors="ignore")
 
     return {"subject": subject, "body": body, "from": msg.get("From")}
+
+def send_email(subject: str, recipients: list, body: str) -> bool:
+
+    msg = Message(
+        subject=subject,
+        recipients=recipients,
+        body=body
+    )
+
+    mail.send(msg)
+
+    return True
+
+def create_inform_client_success_email_body(info: dict) -> str:
+    client_email_body = render_template(
+        'inform_client_success.html',
+        form_id=info['Form_ID'],
+        submission_id=info['Submission_ID'],
+        full_name=info['Full_Name'],
+        email=info['Email'],
+        phone_number=info['Phone_Number']
+    )
+
+    return client_email_body
+    
+def create_inform_staff_success_email_body(info: dict) -> str:
+
+    staff_email_body = render_template(
+        'inform_staff_success.html',
+        form_id=info['Form_ID'],
+        submission_id=info['Submission_ID'],
+        full_name=info['Full_Name'],
+        email=info['Email'],
+        phone_number=info['Phone_Number']
+    )
+
+    return staff_email_body
+
+def create_inform_staff_error_email_body(info: dict) -> str:
+
+    staff_email_body = render_template(
+        'inform_staff_error.html',
+        form_id=info['Form_ID'],
+        submission_id=info['Submission_ID'],
+        full_name=info['Full_Name'],
+        email=info['Email'],
+        phone_number=info['Phone_Number'],
+        error_message=info['Error_Message']
+    )
+
+    return staff_email_body

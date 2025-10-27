@@ -59,9 +59,20 @@ class Config:
     S3_FILE_KEY = os.getenv('S3_FILE_KEY')
     REGION_NAME = os.getenv('REGION_NAME', 'us-east-1')
 
-    # Admin email credentials
+    # Admin email credentials, used for IMAP access and sending out notifications
     ADMIN_EMAIL_PASSWORD = os.getenv('ADMIN_EMAIL_PASSWORD')
     ADMIN_EMAIL_USER = os.getenv('ADMIN_EMAIL_USER')
+
+    MAIL_SERVER = "smtp.example.com"
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USE_SSL = False
+    MAIL_USERNAME =  os.getenv('SENDER_EMAIL_USER',ADMIN_EMAIL_USER)
+    MAIL_PASSWORD = os.getenv('SENDER_EMAIL_PASSWORD',ADMIN_EMAIL_PASSWORD)
+    MAIL_DEFAULT_SENDER = os.getenv('SENDER_EMAIL_USER',ADMIN_EMAIL_USER)
+
+    # Error notification email recipient
+    ERROR_NOTIFICATION_EMAIL = os.getenv('ERROR_NOTIFICATION_EMAIL', ADMIN_EMAIL_USER)
 
     # Zeffy payment notification
     CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES = os.getenv('CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES', 60)
