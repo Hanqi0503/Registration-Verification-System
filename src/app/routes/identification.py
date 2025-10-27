@@ -17,10 +17,20 @@ def check_identification():
     try:
         data = request.get_json()
         image_url = data.get("image_url")
+
+        register_info = {}
+
+        register_info["Full_Name"] = data.get("full_name", "")
+        register_info["PR_Card_Number"] = data.get("pr_card_number", "")
+        register_info["Phone_Number"] = data.get("phone_number", "")
+        register_info["Email"] = data.get("email", "")
+        register_info["Form_ID"] = data.get("form_id", "")
+        register_info["Submission_ID"] = data.get("submission_id", "")
+
         if not data:
             return jsonify({"error": "Missing JSON payload"}), 400
 
-        result = identification_service(image_url)
+        result = identification_service(image_url, register_info)
 
         return jsonify(getattr(result, "to_dict", lambda: {"result": result})())
     
