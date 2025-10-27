@@ -1,9 +1,10 @@
 from app.config.config import Config
-from app.utils.imap_utils import connect_gmail, search_emails, fetch_email
+from app.utils.imap_utils import connect_gmail, search_emails, fetch_email, send_email, create_inform_staff_error_email_body
 from app.utils.database_utils import update_to_csv, get_from_csv
 import re
 from datetime import date
 from typing import Optional
+from flask import current_app
 
 def payment_service(from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> dict:
     '''
@@ -53,6 +54,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
             
             if not payment_info:
                 print("⚠️ Could not extract payment information from email")
+                notify_manually_check = True
                 results.append( {
                     "update_success": False,
                     "message": "Failed to extract payment details from email",
@@ -67,27 +69,97 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
             print("Updating database...")
 
             actual_amount = payment_info.get("Actual_Paid_Amount")
-            # There is a edge case where payer name not just one?
-            rows = get_from_csv(match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
 
-            if rows and actual_amount is not None:
-                target_amount = rows[0].get("Amount_of_Payment")
-                if target_amount == actual_amount:
-                    payment_info['Payment_Status'] = True
-                    
+            if actual_amount is None:
+                notify_manually_check = True
+                results.append({
+                    "update_success": False,
+                    "message": "Cannot determine actual paid amount, manual review needed",
+                    "email_subject": email_data['subject'],
+                    "full_name": payment_info.get("Payer_Full_Name")
+                })
+
+                continue
+
+            payer_full_name = payment_info.get("Payer_Full_Name")
+
+            if payer_full_name is None:
+                notify_manually_check = True
+                results.append({
+                    "update_success": False,
+                    "message": "Payer full name missing, manual review needed",
+                    "email_subject": email_data['subject']
+                })
+
+                continue
+            rows = get_from_csv(match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
+            
+            if len(rows) != 1:
+                notify_manually_check = True
+                results.append({
+                    "update_success": False,
+                    "message": "Multiple or no records found for payer name, manual review needed",
+                    "email_subject": email_data['subject'],
+                    "full_name": payment_info.get("Payer_Full_Name")
+                })
+
+                continue
+
+            target_amount = rows[0].get("Amount_of_Payment")
+
+            if float(target_amount) == actual_amount:
+                payment_info['Payment_Status'] = True
+
             update_success = update_to_csv(payment_info, match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
 
             results.append({**payment_info, "update_success": update_success})
 
-            if not payment_info['Payment_Status'] or not update_success:
+            if not payment_info['Payment_Status']:
                 notify_manually_check = True
+                results.append({
+                    "update_success": update_success,
+                    "message": "The payment amount does not match the expected amount, manual review needed",
+                    "email_subject": email_data['subject'],
+                    "full_name": payment_info.get("Payer_Full_Name")
+                })
+
+            if not update_success:
+                notify_manually_check = True
+                results.append({
+                    "update_success": update_success,
+                    "message": "Failed to update database record, manual review needed, it may be a missing full name match in database.",
+                    "email_subject": email_data['subject'],
+                    "full_name": payment_info.get("Payer_Full_Name")
+                })
 
         # Step 6: Close Gmail connection
         imap.close()
         imap.logout()
         print("✅ Disconnected from Gmail")
 
-        # Step 7: Return result
+        # Step 7: Notify staff for manual review if needed
+        if notify_manually_check:
+            formatted_reasons = "\n".join([result['message'] for result in results])
+            error_message = f"The error happened because Zeffy payment email search failed with the following reasons:\n{formatted_reasons}"
+            
+            info = {
+                "Form_ID": "",
+                "Submission_ID": "",
+                "Full_Name": "",
+                "Email": "",
+                "Phone_Number": "",
+                "Error_Message": error_message
+            }
+
+            create_inform_staff_error_email_body(info)
+
+            send_email(
+                subject="Manual Review Required for Zeffy Payment Checking",
+                recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+                body= create_inform_staff_error_email_body(info)
+            )
+
+        # Step 8: Return result
         return results
 
     except Exception as e:
