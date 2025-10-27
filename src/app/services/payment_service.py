@@ -151,8 +151,6 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
                 "Error_Message": error_message
             }
 
-            create_inform_staff_error_email_body(info)
-
             send_email(
                 subject="Manual Review Required for Zeffy Payment Checking",
                 recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
@@ -163,7 +161,24 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
         return results
 
     except Exception as e:
-        print(f"❌ Error in payment_service: {str(e)}")
+
+        info = {
+                "Form_ID": "",
+                "Submission_ID": "",
+                "Full_Name": "",
+                "Email": "",
+                "Phone_Number": "",
+                "Error_Message": f"Error in payment_service: {str(e)}"
+            }
+
+        error_message = create_inform_staff_error_email_body(info)
+
+        send_email(
+            subject="Manual Review Required for Zeffy Payment Checking",
+            recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+            body=error_message
+        )
+        
         return {
             "status": "error",
             "message": f"Error processing payment: {str(e)}"

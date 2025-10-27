@@ -248,8 +248,6 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
                 "Error_Message": error_message
             }
 
-            create_inform_staff_error_email_body(info)
-
             send_email(
                 subject="Manual Review Required for PR Card Verification",
                 recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
