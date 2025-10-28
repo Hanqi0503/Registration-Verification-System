@@ -6,7 +6,7 @@ from flask import render_template
 
 from flask_mail import Message
 
-from app import mail
+from app.extensions.mail import mail
 
 def connect_gmail(username: str, app_password: str):
     """
@@ -78,7 +78,7 @@ def send_email(subject: str, recipients: list, body: str) -> bool:
     msg = Message(
         subject=subject,
         recipients=recipients,
-        body=body
+        html=body
     )
 
     mail.send(msg)
