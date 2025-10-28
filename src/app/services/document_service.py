@@ -1,10 +1,13 @@
 import re
 from typing import Dict, List, Any
 
+from flask import current_app
+
 from app.models import IdentificationResult
 from app.utils.image_utils import ninja_image_to_text, local_image_to_text,get_image,normalize
 from app.utils.aws_utils import AWSService
 from app.utils.database_utils import update_to_csv
+from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # ------------------------------------------------------------
 # Thresholds
 # ------------------------------------------------------------
@@ -127,9 +130,9 @@ def _get_id_info(texts,full_name: str,id_number: str) -> str:
     info = {}
     for t in texts:
         if re.search(id_pattern, t, re.IGNORECASE):
-            info["id_number"] = re.search(id_pattern, t).group(0)
+            info["id_number"] = re.search(id_pattern, t, re.IGNORECASE).group(0)
         if name_pattern and re.search(name_pattern, t, re.IGNORECASE):
-            info["full_name"] = re.search(name_pattern, t).group(0)
+            info["full_name"] = re.search(name_pattern, t, re.IGNORECASE).group(0)
     return info
 
 def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[str, Any]:
@@ -142,16 +145,26 @@ def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[s
 # ------------------------------------------------------------
 # Main validator
 # ------------------------------------------------------------
-def identification_service(image_url: str, full_name: str = "", card_number: str = "") -> IdentificationResult:
+def identification_service(image_url: str, register_info: dict) -> IdentificationResult:
     image = get_image(source='URL', imgURL=image_url)
     aws = AWSService()
     ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
     norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
     reasons: List[str] = []
     doc: List[str] = []
+
     valid = False
-    mixed_score = 0.0
     notify_manually_check = False
+    update_success = False
+    keyword_confidence = 0.0
+
+    full_name = register_info.get("Full_Name", "")
+    card_number = register_info.get("PR_Card_Number", "")
+    phone_number = register_info.get("Phone_Number", "")
+    email = register_info.get("Email", "")
+    form_id = register_info.get("Form_ID", "")
+    submission_id = register_info.get("Submission_ID", "")
+
     try:
         texts = [item["text"] for item in norm]
         keyword_confidence = _keyword_in_ocr(texts)
@@ -178,22 +191,14 @@ def identification_service(image_url: str, full_name: str = "", card_number: str
             reasons.append(f"PR Card Keyword found confidence is lower than the threshold.")
             doc.append("Generic_Photo_ID")
             valid = False
-        
 
-        # 1. Get ID Info and Name if give full_name and card_number, making card_number not null if there is fullname
-        # 1.1 Return both name and number, correct
-        # 1.2 If return name but no number, number is wrong
-        # 1.3 If return number but no name, name is wrong
-        # 1.4 If return nothing, both wrong
-        # 2. Get Extract ID, so only Id number is return
-        # 2.1 Check if the extracted ID is in the database and update status
-        # 2.2 If not in database, notify the staff to manually check
-        # 3. Cannot get extract ID, notify staff to manually check
         find_id_number = True
         id_info = {}
         if full_name and card_number:
             id_info = _get_id_info(texts, full_name, card_number)
             if "full_name" not in id_info or "id_number" not in id_info:
+                if "id_number" not in id_info:
+                    find_id_number = False
                 notify_manually_check = True
                 reasons.append(f"Full name or ID number does not match the input.")
                 valid = False
@@ -205,11 +210,9 @@ def identification_service(image_url: str, full_name: str = "", card_number: str
                 reasons.append(f"Cannot extract ID number from the image; manual review required.")
                 valid = False
 
-        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=texts)
-        
-        update_success = False
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
 
-        card_info = _get_pr_card_verified_info(valid, mixed_score, reasons)
+        card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
 
         if find_id_number:
             pr_card_id = id_info.get("id_number", card_number)
@@ -224,20 +227,55 @@ def identification_service(image_url: str, full_name: str = "", card_number: str
             reasons.append("Failed to update the database; manual review required.")
 
         if notify_manually_check:
-            # later implement notification to staff
-            pass
+            formatted_reasons = "\n".join(reasons)
+
+            error_message = f"The error happened because OCR recognition failed with the following reasons:\n{formatted_reasons}"
+            
+            info = {
+                "Form_ID": form_id,
+                "Submission_ID": submission_id,
+                "Full_Name": full_name,
+                "Email": email,
+                "Phone_Number": phone_number,
+                "Error_Message": error_message
+            }
+
+            send_email(
+                subject="Manual Review Required for PR Card Verification",
+                recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+                body= create_inform_staff_error_email_body(info)
+            )
 
         result = {**identification_result.__dict__, "update_success": update_success, "PR_Card_INFO": id_info}
         return result
     except Exception as e:
         # ❓ Unknown
         reasons += [str(e)]
-        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=mixed_score, raw_text=[item["text"] for item in norm])
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=[item["text"] for item in norm])
         result = {**identification_result.__dict__, "update_success": False}
-        if notify_manually_check:
-            # later implement notification to staff
-            pass
-        return result
+            
+        formatted_reasons = "\n".join(reasons)
+
+        error_message = f"The error happened because OCR recognition failed with the following reasons:\n{formatted_reasons}"
+        
+        info = {
+            "Form_ID": form_id,
+            "Submission_ID": submission_id,
+            "Full_Name": full_name,
+            "Email": email,
+            "Phone_Number": phone_number,
+            "Error_Message": error_message
+        }
+
+        create_inform_staff_error_email_body(info)
+
+        send_email(
+            subject="Manual Review Required for PR Card Verification",
+            recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+            body= create_inform_staff_error_email_body(info)
+        )
+
+        raise RuntimeError(result) from e
 
     # ✅ Confirmation of PR
     '''if copr >= 2:

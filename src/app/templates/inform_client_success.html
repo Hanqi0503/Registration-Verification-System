@@ -1,0 +1,31 @@
+<html>
+<head>
+    <title>Registration Confirmation</title>
+</head>
+<body>
+    <p>Dear {{ full_name }},</p>
+
+    <p>Thank you for completing the payment and registering for our course! We are thrilled to have you join us and look forward to supporting you in your learning journey.</p>
+    
+    <h3>Your Registration Details:</h3>
+    <ul>
+        <li><strong>Form ID:</strong> {{ form_id }}</li>
+        <li><strong>Submission ID:</strong> {{ submission_id }}</li>
+        <li><strong>Full Name:</strong> {{ full_name }}</li>
+        <li><strong>Email:</strong> {{ email }}</li>
+        <li><strong>Phone Number:</strong> {{ phone_number }}</li>
+    </ul>
+
+    <p>Your registration is now **confirmed**, and your payment has been successfully processed. Should you need any assistance or have further questions, please don't hesitate to contact us.</p>
+
+    <p>We are excited to have you with us and are confident you will find this course valuable.</p>
+
+    <p>Thank you again for choosing us, and we look forward to seeing you in the course!</p>
+
+    <p>
+        Best regards,<br>
+        The Community Family Services of Ontario (CFSO)<br>
+        <a href="mailto:jleung@cfso.care">jleung@cfso.care</a>
+    </p>
+</body>
+</html>

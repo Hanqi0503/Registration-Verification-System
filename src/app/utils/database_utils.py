@@ -3,6 +3,8 @@ from datetime import datetime
 import pandas as pd
 from datetime import datetime
 import os
+import json
+import numpy as np
 
 def save_to_db(collection_name: str, data: dict) -> dict:
     """
@@ -99,7 +101,7 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         print(f"❌ Failed to read CSV file: {e}")
         return False
 
-    match_index = df.index[df[match_column] == match_value].tolist()
+    match_index = df.index[df[match_column].astype(str).str.lower().str.strip() == str(match_value).lower().strip()].tolist()
 
     if not match_index:
         print(f"❌ No matching record found for {match_column} = {match_value}")
@@ -108,9 +110,22 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     match_index = match_index[0]  # take first match
 
     for k, v in data.items():
-        if k in df.columns:
-            df.at[match_index, k] = v
+        # normalize iterables/dicts to a scalar for CSV
+        if isinstance(v, (list, tuple, dict, np.ndarray)):
+            v = json.dumps(v)
 
+        # convert column to object to avoid dtype incompatibility warnings/errors
+        if not pd.api.types.is_object_dtype(df[k].dtype):
+            df[k] = df[k].astype(object)
+
+        # finally assign single scalar value
+        df.at[match_index, k] = v
+
+    # ensure updated_at exists and is set (object dtype)
+    if "Updated_At" not in df.columns:
+        df["Updated_At"] = ""
+    if not pd.api.types.is_object_dtype(df["Updated_At"].dtype):
+        df["Updated_At"] = df["Updated_At"].astype(object)
     df.at[match_index, "Updated_At"] = datetime.utcnow().isoformat()
 
     try:
@@ -147,7 +162,7 @@ def get_from_csv(match_column: str, match_value):
         print(f"❌ Failed to read CSV file: {e}")
         return None
 
-    match_rows = df[df[match_column] == match_value]
+    match_rows = df[df[match_column].astype(str).str.lower().str.strip() == str(match_value).lower().strip()]
 
     if match_rows.empty:
         print(f"❌ No matching record found for {match_column} = {match_value}")
