@@ -63,7 +63,7 @@ class Config:
     ADMIN_EMAIL_PASSWORD = os.getenv('ADMIN_EMAIL_PASSWORD')
     ADMIN_EMAIL_USER = os.getenv('ADMIN_EMAIL_USER')
 
-    MAIL_SERVER = "smtp.example.com"
+    MAIL_SERVER = "smtp.gmail.com"
     MAIL_PORT = 587
     MAIL_USE_TLS = True
     MAIL_USE_SSL = False
