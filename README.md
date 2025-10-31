@@ -155,9 +155,9 @@ curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amo
 	  - `subject` (defaults to `ZEFFY_SUBJECT`)
 	  - `since_date` (ISO date string `YYYY-MM-DD`) — if provided, only emails on/after this date will be processed.
 	- Returns: JSON with `count` (number of processed emails) and `results` (array of result objects).
-	  Each result item will typically be one of:
-	  - `{"update_success": false, "message": "...", "email_subject": "..."}` when extraction failed.
-	  - `{"payer_full_name": "...", "amount_of_payment": 150.0, "unique_id": "...", "payment_status": true, "paid": true, "update_success": true}` when payment info was extracted and DB update attempted.
+	Each result item will typically be one of:
+  - `{"update_success": false, "message": "...", "email_subject": "..."}` when extraction failed.
+  - `{"Payer_Full_Name": "Smith, John", "Actual_Paid_Amount": 125.0, "Purchase_Date": "October 9, 2025", "Course_Name": "Standard First Aid Course", "Payment_Status": false, "Paid": true, "update_success": true}` when payment info was extracted from real Zeffy email format and DB update attempted.
 	- Example:
 
 ```bash
