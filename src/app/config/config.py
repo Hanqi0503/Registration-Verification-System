@@ -75,6 +75,23 @@ class Config:
     NINJA_API_URL = 'https://api.api-ninjas.com/v1/imagetotext'
     NINJA_API_KEY = os.getenv('NINJA_API_KEY')
 
+    # Opt-in flags to avoid accidental use of paid/third-party services
+    # Set these to 'true' in your .env to enable the corresponding features.
+    USE_EXTERNAL_OCR = os.getenv('USE_EXTERNAL_OCR', 'false').lower() == 'true'
+    USE_S3 = os.getenv('USE_S3', 'false').lower() == 'true'
+    USE_MONGO = os.getenv('USE_MONGO', 'false').lower() == 'true'
+    # Model-based detector opt-in (TorchScript / ONNX)
+    USE_MODEL_DETECTOR = os.getenv('USE_MODEL_DETECTOR', 'false').lower() == 'true'
+    # Path to the exported model (TorchScript or ONNX). Default points to the training output.
+    MODEL_DETECTOR_PATH = os.getenv('MODEL_DETECTOR_PATH', 'models/model_epoch_2.ts')
+    # Confidence threshold to accept a model detection as a positive card match
+    # Raise default detector threshold to reduce false positives on printed/handwritten spoofs.
+    # Projects can still override via the MODEL_DETECTOR_THRESHOLD env var.
+    MODEL_DETECTOR_THRESHOLD = float(os.getenv('MODEL_DETECTOR_THRESHOLD', 0.96))
+    # Opt-in: use an external/local model service (HTTP) instead of in-process model
+    USE_MODEL_SERVICE = os.getenv('USE_MODEL_SERVICE', 'false').lower() == 'true'
+    MODEL_SERVICE_URL = os.getenv('MODEL_SERVICE_URL', 'http://localhost:8000/infer')
+
     @classmethod
     def validate_required(cls) -> None:
         """

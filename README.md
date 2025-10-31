@@ -171,15 +171,12 @@ Notes:
 
 This project includes small helpers for downloading images and performing OCR using an external "image to text" API. They live under `src/app/utils/image_utils.py` and the main helpers are:
 
-- `fetch_image_bytes(image_url: str) -> bytes`
 	- Downloads an image from `image_url` and returns the raw bytes.
 	- If the URL points to an HTML page, the helper will parse the page and extract the first `<img src=...>` it finds and then download that image instead.
 	- If `JOTFORM_API_KEY` is set in your `.env`, the function will append it as a query parameter when requesting JotForm-hosted image URLs.
 
-- `extract_image_url(html_content: str | bytes) -> str`
 	- Parses HTML content and returns the first `<img>` `src` value found. Raises `ValueError` if none found.
 
-- `ninja_image_to_text(img_url: str) -> dict`
 	- Convenience wrapper that downloads image bytes (via `fetch_image_bytes`) then calls the configured `NINJA_API_URL` with header `X-Api-Key: <NINJA_API_KEY>` and returns the parsed JSON result.
 	- Requires `NINJA_API_KEY` set in `.env` when you call it.
 
@@ -197,10 +194,26 @@ print(ocr_result)
 ```
 
 Dependencies
-- These helpers use the following third-party packages; ensure they are installed in your environment (they are listed in `pyproject.toml`):
 	- `requests` (HTTP requests)
 	- `beautifulsoup4` (HTML parsing, provides `bs4`)
 	- `pillow` (PIL, for fallback image decoding)
+
+Optional (improved local OCR):
+- EasyOCR (recommended) — more accurate than Tesseract on many card images.
+  Install with pip and CPU-only PyTorch:
+
+```powershell
+pip install easyocr
+pip install "torch" --index-url https://download.pytorch.org/whl/cpu
+```
+
+If you prefer Tesseract (lighter), install the Tesseract binary (Windows installer or Chocolatey):
+
+```powershell
+# with Chocolatey
+choco install tesseract
+# or download installer from https://github.com/tesseract-ocr/tesseract/releases
+```
 
 
 ## Development tips & common troubleshooting
