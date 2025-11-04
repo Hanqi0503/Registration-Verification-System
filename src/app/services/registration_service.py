@@ -78,7 +78,9 @@ def registration_service(data, pr_amount, normal_amount):
         submission_id = extract_submission_id(e_transfer_file_upload_urls)
         registration_data['E_Transfer_File_Upload_URLs'] = e_transfer_file_upload_urls
         registration_data['Submission_ID'] = submission_id
-    
+    elif registration_data["PR_Status"]:
+        submission_id = extract_submission_id(pr_file_upload_urls)
+        registration_data['Submission_ID'] = submission_id
     # Store extracted data into app database
     csv_data = add_to_csv(registration_data)
     if csv_data is None:
