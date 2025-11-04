@@ -54,7 +54,7 @@ def jotform_service(data, pr_amount, normal_amount):
             "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if registration_data.get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER"),
         }
         send_email(
-            subject=f"{registration_data.get('Course')} Registration Confirmation: OCR Validation Passed Successfully!",
+            subject=f"{registration_data.get('Course')} Registration Confirmation: No OCR Validation Needed!",
             recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
             body= create_inform_staff_ocr_success_email_body(info)
         )
@@ -78,12 +78,12 @@ def jotform_service(data, pr_amount, normal_amount):
                 "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if registration_data.get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER"),
             }
             send_email(
-                subject=f"{registration_data.get('Course')} Registration Confirmation: OCR Validation Passed Successfully!",
+                subject=f"{registration_data.get('Course')} Registration Confirmation: Registration Confirmation: ALL Validation Passed Successfully!",
                 recipients=[registration_data.get("Email", "")],
                 body= create_inform_client_success_email_body(info)
             )
             send_email(
-                subject=f"{registration_data.get('Course')} Registration Confirmation: OCR Validation Passed Successfully!",
+                subject=f"{registration_data.get('Course')} Registration Confirmation: Registration Confirmation: ALL Validation Passed Successfully!",
                 recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
                 body= create_inform_staff_success_email_body(info)
             )

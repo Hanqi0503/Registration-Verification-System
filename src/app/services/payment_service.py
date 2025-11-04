@@ -109,7 +109,6 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
             print("Payment processing result:", {**payment_info, "update_success": update_success})
             # Step 6: Notify the staff and the client when the payment amount is not correct
             if not payment_info['Payment_Status']:
-                print("Payment Status is False, amount mismatch")
                 notify_manually_check = True
                 error_messages.append({
                     "update_success": update_success,
