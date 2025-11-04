@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Issue</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111; }
+      .container { max-width: 600px; margin: 0 auto; padding: 24px; }
+      .header { background:#39797A; color: #fff; padding:16px; border-radius:6px 6px 0 0; }
+      .content { border: 1px solid #e6e6e6; border-top: none; padding: 20px; border-radius: 0 0 6px 6px; }
+      .button { display:inline-block; background:#39797A; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; }
+      .muted { color:#666; font-size:14px; }
+      .small { font-size:13px; color:#444; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2 style="margin:0;">Payment notice from CFSO</h2>
+      </div>
+      <div class="content">
+        <p>Hi {{ full_name }},</p>
+
+        <p class="small">Thanks for your registration. We reviewed your payment for the <strong>{{ course }}</strong> course.</p>
+
+        <p>We found that the amount you paid (<strong>{{ actual_amount }}</strong>) does not match the expected amount for this course (<strong>{{ expected_amount }}</strong>).</p>
+
+        <p>Because the payment amount is incorrect, our staff will cancel the current payment and you will need to submit the correct payment on Zeffy.</p>
+
+        <!-- {% if zeffy_link %}
+        <p>
+          <a class="button" href="{{ zeffy_link }}">Pay now on Zeffy</a>
+        </p>
+        {% endif %} -->
+
+        <p class="muted">If you believe this is an error or you have any questions, please contact CFSO at <strong>{{ support_contact }}</strong> and we will help you.</p>
+
+        <hr />
+
+        <p class="small">Summary</p>
+        <ul>
+          <li>Course: <strong>{{ course }}</strong></li>
+          <li>Amount you paid: <strong>{{ actual_amount }}</strong></li>
+          <li>Expected amount: <strong>{{ expected_amount }}</strong></li>
+        </ul>
+
+        <p class="small">If you have already paid the correct amount via Zeffy, please ignore this message.</p>
+
+        <p class="small">Thanks,<br/>CFSO Team</p>
+      </div>
+    </div>
+  </body>
+</html>

@@ -28,19 +28,30 @@ Use Python 3.9 (the codebase uses modern type union syntax and other features).
 
 ```
 Registration-Verification-System/
-├── .env.example              # example env with placeholders
+├── .env.example                      # example env with placeholders
 ├── pyproject.toml
+├── png/
+│   ├── Phase1-Flowchart.png
+│   └── Phase2-Flowchart.png
 ├── src/
-│   ├── main.py               # application entrypoint
+│   ├── main.py                       # application entrypoint
 │   └── app/
-│       ├── __init__.py       # create_app factory
-│       ├── config/config.py  # Config class that loads .env via python-dotenv
-│       ├── routes/           # Flask blueprints (registration, payment)
-│       ├── services/         # business logic + db helpers
-│       ├── models/           # dataclasses 
-│       └── background/       # scheduler jobs (payment_watcher)
+│       ├── __init__.py               # create_app factory
+│       ├── background/
+│       │   └── payment_watcher.py     # scheduled payment email watcher
+│       ├── config/
+│       │   └── config.py              # Config class (loads .env)
+│       ├── extensions/
+│       │   └── mail.py                # helper to send emails
+│       ├── models/
+│       ├── routes/
+│       ├── services/
+│       ├── templates/
+│       └── utils/
 └── data/
-    └── registration_data.csv # CSV store (created/loaded automatically)
+	├── registration_data.csv         # CSV store (created/loaded automatically)
+	└── image/
+		└── PR Card/
 ```
 
 ## Setup (local development)
@@ -137,27 +148,96 @@ Additional configuration variables
 All application routes are registered under the `/api` prefix. The main endpoints are:
 
 - POST /api/jotform-webhook
-	- Description: Receives JotForm webhook submissions. Expects JSON body from JotForm.
+	- Description: Receive JotForm Webhook, structured as URL-encoded key-value pairs in the body of the HTTP POST request.
+	- Query params (required): `pr_amount` (float), `normal_amount` (float)
+	- Returns: JSON with `registration` (processed registration details) and `identification` (The result of checking PR Card) .
+	- Example:
+
+```bash
+curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "rawRequest={
+    'slug': 'submit/253056105937053',
+    'q6_legalName': {'first': 'YuYing', 'last': 'Wu3'},
+    'q8_email': 'yuying.wu@example.com',
+    'q9_phoneNumber': {'full': '+1 647 123 4567'},
+    'q26_payersName': {'first': 'YuYing', 'last': 'Wu'},
+    'q29_areYou': 'Yes I am',
+    'q11_prCard': '0000-0000',
+    'clearFront': ['https://files.jotform.com/uploads/example_front_card.jpg'],
+    'course': {'products': [{'productName': 'Standard First Aid with CPR Level C & AED Certification'}]}
+  }"
+```
+
+- POST /api/registration-webhook
+	- Description: Receives Course Registration submissions. Expects JSON body.
 	- Query params (required): `pr_amount` (float), `normal_amount` (float)
 	- Returns: JSON with `message` and `result` (processed registration details).
 	- Example:
 
 ```bash
-curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
+curl -X POST "http://127.0.0.1:5050/api/registration-webhook?pr_amount=150&normal_amount=100" \
 	-H "Content-Type: application/json" \
-	-d '{"name": {"first": "Jane", "last": "Doe"}, "email": "jane@example.com", ... }'
+	-d '{
+  	"slug": "submit/253056105937053",
+    "q6_legalName": {
+      "first": "YuYing",
+      "last": "Wu3"
+    },
+    "q8_email": "yuying.wu@example.com",
+    "q9_phoneNumber": {
+      "full": "+1 647 123 4567"
+    },
+    "q26_payersName": {
+      "first": "YuYing",
+      "last": "Wu"
+    },
+    "q29_areYou": "Yes I am",
+    "q11_prCard": "0000-0000",
+    "clearFront": [
+      "https://files.jotform.com/uploads/example_front_card.jpg"
+    ],
+	"course": {
+        "products": [
+            {
+                "productName": "Standard First Aid with CPR Level C & AED Certification"
+            }
+        ]
+    }
+}'
 ```
 
 - GET /api/check-payments
-	- Description: Triggers a one-time scan for payment emails and returns matched results.
+	- Description: Triggers a one-time scan for payment emails if CFSO_ADMIN_EMAIL_USER and UNIC_ADMIN_EMAIL_USER are set and returns matched results.
 	- Query params (optional):
 	  - `from` (email address, defaults to `ZEFFY_EMAIL` from config)
 	  - `subject` (defaults to `ZEFFY_SUBJECT`)
 	  - `since_date` (ISO date string `YYYY-MM-DD`) — if provided, only emails on/after this date will be processed.
 	- Returns: JSON with `count` (number of processed emails) and `results` (array of result objects).
-	  Each result item will typically be one of:
-	  - `{"update_success": false, "message": "...", "email_subject": "..."}` when extraction failed.
-	  - `{"payer_full_name": "...", "amount_of_payment": 150.0, "unique_id": "...", "payment_status": true, "paid": true, "update_success": true}` when payment info was extracted and DB update attempted.
+		Each result item will typically be one of:
+
+		- Failure example (extraction failed):
+
+	```json
+	{
+		"update_success": false,
+		"message": "Unable to extract payment info from email body",
+		"email_subject": "Payment Received - order 12345"
+	}
+	```
+
+		- Success example (payment info extracted and DB update attempted):
+
+	```json
+	{
+		"Full_Name": "Name",
+		"Actual_Paid_Amount": 150.0,
+		"Payment_Status": true,
+		"Paid": true,
+		"Course": "Course Name",
+		"Course_Date": "November 9, 2025 at 9:30 AM EST"
+	}
+	```
 	- Example:
 
 ```bash
@@ -168,6 +248,14 @@ curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject
 	- Description: Submit an image for PR Card. The endpoint currently expects a JSON body with an `image_url` pointing to the image to analyze. The service will fetch the image, run OCR and heuristics, and return an identification result.
 	- Body (application/json):
 	  - `image_url` (string, required) — public URL pointing to the image to analyze. Example values: a direct image link (`https://.../image.jpg`) or a hosting URL that contains an `<img>` tag (the helper will extract the first image found).
+	  - `registration_data` (json) - course registration detail, only if match return valid result
+	  	- `Full_Name` (required)
+		- `PR_Card_Number` (required)
+		- `Phone_Number`
+		- `Email`
+		- `Form_ID`
+		- `Submission_ID`
+		- `Course`
 	- Returns: JSON representation of the `IdentificationResult` dataclass with the following fields:
 	  - `doc_type` (array of string): candidate document types detected (e.g. `["PR_CARD"]`).
 	  - `is_valid` (boolean): whether the document is considered a valid match.
@@ -225,12 +313,99 @@ Dependencies
 Additional system dependency:
 - Tesseract OCR binary (required by `pytesseract`). Install on macOS with `brew install tesseract` or on Debian/Ubuntu with `sudo apt install tesseract-ocr`.
 
+# 📧 Automated Notification Reference Guide
+
+This guide outlines the automated email notifications generated by the webhook processing system, providing context and next steps for operational staff and clients.
+
+---
+
+## 🧑‍💻 Staff Notifications (Action & Review Required)
+
+These notifications alert staff to system failures, payment discrepancies, or validation errors.
+
+### 1. System/Database Errors
+
+| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1.1** | **Manual Review: Failed to Save Registration Data** | 🚨 | JotForm data failed to save to the database. | Confirm database availability and connection. | ★★★ |
+
+### 2. Payment Matching Errors (Zeffy)
+
+| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **2.1** | **Review: Payment Mismatch (Payer Notified)** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. | ★★ |
+| **2.2** | **Review: Payment Mismatch (Payer Not UN-notified)** | 📧 | Payment mismatch occurred, but the system could not send the cancellation email (Email missing or invalid in the database). | Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. | ★★ |
+| **2.3** | **Review: Failed to Update Payment Record** | ❌ | System failed to locate or update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. | ★★ |
+| **2.4** | **Review: Payment Check - Other Error** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
+
+### 3. PR Card Verification Errors (OCR)
+
+| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **5.1** | **PR Card Check Confidence HIGH** | ✅ | OCR confidence score for the PR Card is above the acceptance threshold, proving it's a real PR card. | None. The card is implicitly approved. | ★ |
+| **5.2** | **Review: Hand-Written Note Detected** | ✍️ | OCR detected minimal structured text; the upload is likely a hand-written note or a heavily processed image. | Manually check the uploaded PR Card file. | ★★ |
+| **5.3** | **Review: Driver’s Licence Cues Detected** | 🚫 | OCR detected features consistent with a driver’s licence instead of a PR Card. | Manually check the uploaded file to confirm the document type. | ★★ |
+| **5.4** | **Review: Low PR Card Keyword Confidence** | ❓ | The confidence score for identifying the image as a PR Card is below the threshold. | Manually check the uploaded file. | ★★ |
+| **5.5** | **Review: ID/Name Mismatch** | 🔀 | The name or ID number extracted from the PR Card image does not match the information entered in the registration form. | Manually verify the PR Card information against the form data in the database. | ★★ |
+| **5.6** | **Review: Cannot Extract ID Number** | 📸 | The uploaded image is too blurry, cropped, or dark to extract the ID number. | Manually check the uploaded file for clarity. | ★★ |
+| **5.7** | **Review: Failed to Update OCR Database** | 🔄 | System failed to update the database record after OCR, possibly due to a missing or duplicated record. | Manually check the database to resolve the record issue. | ★★ |
+| **5.8** | **Review: OCR - Other Error** | ❓ | An unknown error occurred during PR Card processing. | N/A (Contact IT). | ★★★ |
+
+---
+
+## 4. Staff Notifications (Confirmation/Pending)
+
+These notifications are for staff awareness and require minimal to no immediate action.
+
+| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **3.1** | **[\*Course Name\*] Registration Confirmed** | ✅ | Client's registration, identification, and payment are all confirmed and valid. | None. The process is complete. | ★ |
+| **4.1** | **[\*Course Name\*] OCR Validation Passed** | ✅ | PR client registered, and the PR Card OCR validation was successful. | Await payment confirmation. | ★ |
+| **4.2** | **[\*Course Name\*] No OCR Validation Needed** | ✅ | Non-PR client registered. | Await payment confirmation. | ★ |
+
+---
+
+## 5. Client Notifications (Direct Feedback)
+
+These are the emails sent directly to the client.
+
+| Subject | Emoji Key | Reason & Key Message | Status |
+| :--- | :--- | :--- | :--- |
+| **Action Required: Payment Mismatch for Course Registration** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
+| **Confirmation: Your Spot in [\*Course Name\*] is Secured!** | ✅ | All registration details and payment validations have passed. Your spot in the course is confirmed. | **Confirmed** |
+
 
 ## Development tips & common troubleshooting
 
 - Python version: Use 3.9.
 - Missing `data` directory: create it or ensure `init_csv` runs (it attempts to create the parent path if needed).
 - Ensure `.env` is present in the project root when running locally. Use `.env.example` as a template.
+
+## 🚧 Future Edge Cases for Development
+
+The following issues represent limitations in the current system logic, primarily around course selection, date handling, and payment matching. Addressing these will significantly improve system robustness.
+
+### 1. Handling Course Quantity Selection
+
+| Current Limitation | Proposed Future Fix | Priority |
+| :--- | :--- | :--- |
+| **Jotform allows clients to select a quantity (e.g., 2 spots)** for a single course via its product list, but the current webhook/database logic assumes **one registration record = one course.** The system cannot correctly track or process submissions for multiple spots/quantities. | **Implement Quantity Splitting Logic.** If the Jotform submission includes a quantity greater than one, the webhook processor must **automatically create and insert separate, distinct registration records** in the database (one for each spot purchased). The total payment amount must be correctly distributed or verified against the total quantity. | **High** |
+
+---
+
+### 2. Standardizing Course Name and Date for Matching
+
+| Current Limitation | Proposed Future Fix | Priority |
+| :--- | :--- | :--- |
+| **Course dates/options are treated separately** from the core course name in Jotform/Zeffy. The course date is not consistently included as a permanent part of the **Course Name** used for Zeffy payment matching, leading to ambiguous matching (e.g., distinguishing between "SFA - Nov 9" and "SFA - Dec 1"). | **Enforce Standardized Course Keys.** Modify the Jotform field and the regex logic to ensure the **Course Name** extracted **always includes the date or specific option** (e.g., `Standard First Aid (Nov 9)`). This composite key must be the exact value used for payment matching in the Zeffy notification and stored in the database. | **High** |
+
+---
+
+### 3. Mismatched Dates Between Registration and Payment
+
+| Current Limitation | Proposed Future Fix | Priority |
+| :--- | :--- | :--- |
+| If a client registers for a course date via **Jotform (Date A)** but then manually selects a different date/product via **Zeffy (Date B)**, the final database record currently reflects **Date A** (the Jotform submission), creating a booking error. | **Payment-Driven Date Correction.** Implement logic to compare the registered course/date (from Jotform) with the final course/date identifier in the **Zeffy payment notification**. If a discrepancy exists, the system should **override the Jotform date** and update the database record to reflect the date selected during the **Zeffy payment process (Date B)**, as this confirms the client's final purchase intention. | **Medium** |
 
 ## Git / secrets
 
