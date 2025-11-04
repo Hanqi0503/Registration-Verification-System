@@ -1,61 +1,49 @@
-from app.config.config import Config
-from app.utils.imap_utils import connect_gmail, search_emails, fetch_email, send_email, create_inform_staff_error_email_body
+from app.utils.imap_utils import connect_gmail, send_email, search_emails, fetch_email, \
+        create_inform_client_payment_error_email_body, \
+        create_inform_staff_error_email_body
 from app.utils.database_utils import update_to_csv, get_from_csv
 import re
 from datetime import date
 from typing import Optional
 from flask import current_app
 
-def payment_service(from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> dict:
+def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> list[dict]:
     '''
     Fetch Zeffy payment-related emails using IMAP and store them in DB.
-
     Args:
+    
+        user (str): Gmail username
+        pwd (str): Gmail app password
         from_email (str): Zeffy email
         subject_keyword (str): Keyword to search in email subjects
         since_date (date): Only search for emails since this date
-
-    Returns:
-        dict: data including updated form_id, payment status, payer_full_name, amount_of_payment, unique_id.
+    Returns: 
+        A list of dictionaries containing payment information extracted from the emails.
     '''
-
-    # Get Gmail credentials from config
-    gmail_user = Config.ADMIN_EMAIL_USER
-    gmail_pass = Config.ADMIN_EMAIL_PASSWORD
-
     notify_manually_check = False
+    error_messages = []
     try:
         # Step 1: Connect to Gmail
-        print(f"Connecting to Gmail as {gmail_user}...")
-        imap = connect_gmail(gmail_user, gmail_pass)
-        print("✅ Connected to Gmail successfully!")
+        imap = connect_gmail(user, pwd)
 
         # Step 2: Search for Zeffy payment emails
-        print(f"Searching for emails from {from_email} with subject '{subject_keyword}'...")
         email_ids = search_emails(imap, from_email=from_email, subject_keyword=subject_keyword, since_date=since_date)
-        print(f"✅ Found {len(email_ids)} email(s)")
 
         if not email_ids:
-            print("⚠️ No Zeffy payment emails found")
             return []   
 
         results = []
-        # Step 3: Process the most recent email
+        # Step 3: Process all the emails in the set time frame
         for email_id in email_ids:
-            print(f"Fetching email ID: {email_id}...")
             email_data = fetch_email(imap, email_id)
-
-            print(f"Email Subject: {email_data['subject']}")
-            print(f"Email From: {email_data['from']}")
-            print(f"Email Body Preview: {email_data['body'][:200]}...")
 
             # Step 4: Extract payment information from email body
             payment_info = extract_payment_info(email_data['body'])
-            
+
+            # Could not extract payment information
             if not payment_info:
-                print("⚠️ Could not extract payment information from email")
                 notify_manually_check = True
-                results.append( {
+                error_messages.append({
                     "update_success": False,
                     "message": "Failed to extract payment details from email",
                     "email_subject": email_data['subject']
@@ -63,16 +51,13 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
                 continue
 
-            print(f"✅ Extracted payment info: {payment_info}")
-
             # Step 5: Update CSV database
-            print("Updating database...")
 
             actual_amount = payment_info.get("Actual_Paid_Amount")
 
             if actual_amount is None:
                 notify_manually_check = True
-                results.append({
+                error_messages.append({
                     "update_success": False,
                     "message": "Cannot determine actual paid amount, manual review needed",
                     "email_subject": email_data['subject'],
@@ -85,20 +70,22 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             if payer_full_name is None:
                 notify_manually_check = True
-                results.append({
+                error_messages.append({
                     "update_success": False,
                     "message": "Payer full name missing, manual review needed",
                     "email_subject": email_data['subject']
                 })
 
                 continue
-            rows = get_from_csv(match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
+
+            # Fetch with the payer full name and not yet marked as paid
+            rows = get_from_csv(match_column=["Full_Name", "Course", "Paid"], match_value=[payment_info.get("Full_Name"), rows[0].get("Course"), ""])
             
             if len(rows) != 1:
                 notify_manually_check = True
-                results.append({
+                error_messages.append({
                     "update_success": False,
-                    "message": "Multiple or no records found for payer name, manual review needed",
+                    "message": f"Total {len(rows)} records found for payer name, manual review needed",
                     "email_subject": email_data['subject'],
                     "full_name": payment_info.get("Payer_Full_Name")
                 })
@@ -110,36 +97,59 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
             if float(target_amount) == actual_amount:
                 payment_info['Payment_Status'] = True
 
-            update_success = update_to_csv(payment_info, match_column="Payer_Full_Name", match_value=payment_info.get("Payer_Full_Name"))
+            update_success = update_to_csv(payment_info, match_column=["Payer_Full_Name", "Course", "Paid"], match_value=[payment_info.get("Payer_Full_Name"),rows[0].get("Course"), ""])
 
             results.append({**payment_info, "update_success": update_success})
 
+            # Step 6: Notify the staff and the client when the payment amount is not correct
             if not payment_info['Payment_Status']:
                 notify_manually_check = True
-                results.append({
+                error_messages.append({
                     "update_success": update_success,
-                    "message": "The payment amount does not match the expected amount, manual review needed",
+                    "message": "The payment amount does not match the expected amount, manual review needed. Already inform the payer we will cancel the payment.",
+                    "expected Amount": target_amount,
+                    "actual Paid Amount": actual_amount,
                     "email_subject": email_data['subject'],
                     "full_name": payment_info.get("Payer_Full_Name")
                 })
+
+                if not rows[0].get("Email"):
+                    error_messages.append({
+                    "update_success": update_success,
+                    "message": "The payment amount does not match but not able to notify payer, email missing in database.",
+                    "email_subject": email_data['subject'],
+                    "full_name": payment_info.get("Payer_Full_Name")
+                })
+                else:
+                    info = {
+                        "Expected Amount": target_amount,
+                        "Actual Paid Amount": actual_amount,
+                        "Full_name": payment_info.get("Payer_Full_Name", ""),
+                        "Course": rows[0].get("Course"),
+                        "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if rows[0].get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER")
+                    }
+                    send_email(
+                        subject="Course Payment Amount Mismatch - Action Required",
+                        recipients=[rows[0].get("Email")],
+                        body=create_inform_client_payment_error_email_body(info)
+                    )
 
             if not update_success:
                 notify_manually_check = True
-                results.append({
+                error_messages.append({
                     "update_success": update_success,
-                    "message": "Failed to update database record, manual review needed, it may be a missing full name match in database.",
+                    "message": "Failed to update database record, manual review needed, it may be a missing or multiple full name match in database.",
                     "email_subject": email_data['subject'],
                     "full_name": payment_info.get("Payer_Full_Name")
                 })
 
-        # Step 6: Close Gmail connection
+        # Step 7: Close Gmail connection
         imap.close()
         imap.logout()
-        print("✅ Disconnected from Gmail")
 
-        # Step 7: Notify staff for manual review if needed
+        # Step 8: Notify staff for manual review if needed
         if notify_manually_check:
-            formatted_reasons = "\n".join([result['message'] for result in results])
+            formatted_reasons = "\n".join([error['message'] for error in error_messages])
             error_message = f"The error happened because Zeffy payment email search failed with the following reasons:\n{formatted_reasons}"
             
             info = {
@@ -153,13 +163,12 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
 
             send_email(
                 subject="Manual Review Required for Zeffy Payment Checking",
-                recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
                 body= create_inform_staff_error_email_body(info)
             )
 
-        # Step 8: Return result
+        # Step 9: Only return successful updated to database results
         return results
-
     except Exception as e:
 
         info = {
@@ -171,12 +180,10 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
                 "Error_Message": f"Error in payment_service: {str(e)}"
             }
 
-        error_message = create_inform_staff_error_email_body(info)
-
         send_email(
             subject="Manual Review Required for Zeffy Payment Checking",
-            recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
-            body=error_message
+            recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
+            body=create_inform_staff_error_email_body(info)
         )
         
         return {
@@ -184,6 +191,33 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
             "message": f"Error processing payment: {str(e)}"
         }
 
+def payment_service(from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> list[dict]:
+    '''
+    Fetch CFSO and UNIC mail box Zeffy payment.
+
+    Args:
+        from_email (str): Zeffy email
+        subject_keyword (str): Keyword to search in email subjects
+        since_date (date): Only search for emails since this date
+
+    Returns:
+        dict: data including updated form_id, payment status, payer_full_name, amount_of_payment, unique_id.
+    '''
+
+    # Get Gmail credentials from config
+    cfso_gmail_user = current_app.config.get("CFSO_ADMIN_EMAIL_USER")
+    cfso_gmail_pass = current_app.config.get("CFSO_ADMIN_EMAIL_PASSWORD")
+
+    unic_gmail_user = current_app.config.get("UNIC_ADMIN_EMAIL_USER")
+    unic_gmail_pass = current_app.config.get("UNIC_ADMIN_EMAIL_PASSWORD")
+
+    results = []
+    if cfso_gmail_user and cfso_gmail_pass:
+        results.extend(payment_service_by_email(cfso_gmail_user, cfso_gmail_pass, from_email, subject_keyword, since_date))
+    if unic_gmail_user and unic_gmail_pass:
+        results.extend(payment_service_by_email(unic_gmail_user, unic_gmail_pass, from_email, subject_keyword, since_date))
+
+    return results
 
 def extract_payment_info(email_body: str) -> dict:
     """
@@ -212,7 +246,7 @@ def extract_payment_info(email_body: str) -> dict:
     for pattern in name_patterns:
         match = re.search(pattern, email_body, re.IGNORECASE)
         if match:
-            payment_info['Payer_Full_Name'] = match.group(1).strip()
+            payment_info['Full_Name'] = match.group(1).strip()
             break
 
     # Extract amount (common patterns)
