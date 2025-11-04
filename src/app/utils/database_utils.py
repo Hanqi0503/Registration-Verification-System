@@ -74,16 +74,16 @@ def add_to_csv(data: dict) -> bool:
         print("❌ Failed to write to CSV file")
         return False
     
-    return True
+    return new_row
 
-def update_to_csv(data: dict, match_column: str, match_value) -> bool:
+def update_to_csv(data: dict, match_column: list[str], match_value: list) -> bool:
     """
     Update or append a record in the CSV backing store.
 
     Args:
         data (dict): Fields to update or insert.
-        match_column (str): Column name to match (case-insensitive).
-        match_value: Value to match in the match_column.
+        match_column (list[str]): Column names to match (case-insensitive).
+        match_value (list): Values to match in the match_column.
 
     Returns:
         bool: True on success, False on missing CSV path or I/O errors.
@@ -101,13 +101,29 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
         print(f"❌ Failed to read CSV file: {e}")
         return False
 
-    match_index = df.index[df[match_column].astype(str).str.lower().str.strip() == str(match_value).lower().strip()].tolist()
+    mask = pd.Series(True, index=df.index)
+    for col, val in zip(match_column, match_value):
+        is_null_or_empty_input = pd.isna(val) or str(val).strip().lower() == ""
 
-    if not match_index:
+        if is_null_or_empty_input:
+            is_nan_in_df = df[col].isna()
+            is_empty_string_in_df = df[col].astype(str).str.strip() == ""
+            mask &= (is_nan_in_df | is_empty_string_in_df)
+            
+        else:
+            mask &= df[col].astype(str).str.lower().str.strip() == str(val).lower().strip()
+
+    match_indexs = df.index[mask].tolist()
+
+    if not match_indexs:
         print(f"❌ No matching record found for {match_column} = {match_value}")
         return False
     
-    match_index = match_index[0]  # take first match
+    if len(match_indexs) > 1:
+        print(f"❌ Multiple matching records found for {match_column} = {match_value}")
+        return False
+
+    match_index = match_indexs[0]  # take first match
 
     for k, v in data.items():
         # normalize iterables/dicts to a scalar for CSV
@@ -139,13 +155,13 @@ def update_to_csv(data: dict, match_column: str, match_value) -> bool:
     
     return True
 
-def get_from_csv(match_column: str, match_value):
+def get_from_csv(match_column: list[str], match_value:list):
     """
     Retrieve a record from the CSV backing store.
 
     Args:
-        match_column (str): Column name to match (case-insensitive).
-        match_value: Value to match in the match_column.
+        match_column (list[str]): Column names to match (case-insensitive).
+        match_value (list): Values to match in the match_column.
 
     Returns:
         dict | None: The matching record as a dictionary, or None if not found.
@@ -162,7 +178,12 @@ def get_from_csv(match_column: str, match_value):
         print(f"❌ Failed to read CSV file: {e}")
         return None
 
-    match_rows = df[df[match_column].astype(str).str.lower().str.strip() == str(match_value).lower().strip()]
+    mask = pd.Series(True, index=df.index)
+
+    for col, val in zip(match_column, match_value):
+        mask &= df[col].astype(str).str.lower().str.strip() == str(val).lower().strip()
+
+    match_rows = df[mask]
 
     if match_rows.empty:
         print(f"❌ No matching record found for {match_column} = {match_value}")
