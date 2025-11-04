@@ -179,9 +179,16 @@ def get_from_csv(match_column: list[str], match_value:list):
         return None
 
     mask = pd.Series(True, index=df.index)
-
     for col, val in zip(match_column, match_value):
-        mask &= df[col].astype(str).str.lower().str.strip() == str(val).lower().strip()
+        is_null_or_empty_input = pd.isna(val) or str(val).strip().lower() == ""
+
+        if is_null_or_empty_input:
+            is_nan_in_df = df[col].isna()
+            is_empty_string_in_df = df[col].astype(str).str.strip() == ""
+            mask &= (is_nan_in_df | is_empty_string_in_df)
+            
+        else:
+            mask &= df[col].astype(str).str.lower().str.strip() == str(val).lower().strip()
 
     match_rows = df[mask]
 

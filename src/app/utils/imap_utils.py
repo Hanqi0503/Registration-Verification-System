@@ -116,7 +116,7 @@ def create_inform_staff_success_email_body(info: dict) -> str:
 def create_inform_staff_ocr_success_email_body(info: dict) -> str:
 
     staff_email_body = render_template(
-        'inform_staff_ocr_success.html',
+        'inform_staff_register_success.html',
         form_id=info['Form_ID'],
         submission_id=info['Submission_ID'],
         full_name=info['Full_Name'],

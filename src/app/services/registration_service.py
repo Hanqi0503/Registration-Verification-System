@@ -81,7 +81,7 @@ def registration_service(data, pr_amount, normal_amount):
     
     # Store extracted data into app database
     csv_data = add_to_csv(registration_data)
-    if not csv_data:
+    if csv_data is None:
 
         info = {
                 "Form_ID": form_id,

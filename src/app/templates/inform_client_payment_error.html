@@ -24,7 +24,7 @@
 
         <p class="small">Thanks for your registration. We reviewed your payment for the <strong>{{ course }}</strong> course.</p>
 
-        <p>We found that the amount you paid (<strong>{{ paid_amount }}</strong>) does not match the expected amount for this course (<strong>{{ expected_amount }}</strong>).</p>
+        <p>We found that the amount you paid (<strong>{{ actual_amount }}</strong>) does not match the expected amount for this course (<strong>{{ expected_amount }}</strong>).</p>
 
         <p>Because the payment amount is incorrect, our staff will cancel the current payment and you will need to submit the correct payment on Zeffy.</p>
 
@@ -41,7 +41,7 @@
         <p class="small">Summary</p>
         <ul>
           <li>Course: <strong>{{ course }}</strong></li>
-          <li>Amount you paid: <strong>{{ paid_amount }}</strong></li>
+          <li>Amount you paid: <strong>{{ actual_amount }}</strong></li>
           <li>Expected amount: <strong>{{ expected_amount }}</strong></li>
         </ul>
 
