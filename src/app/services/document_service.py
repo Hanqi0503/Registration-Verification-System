@@ -12,8 +12,8 @@ from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # Thresholds
 # ------------------------------------------------------------
 
-PR_CARD_KEYWORD_THRESHOLD = 0.5
-PR_CARD_POSITION_THRESHOLD = 0.5
+PR_CARD_KEYWORD_THRESHOLD = 0.8
+PR_CARD_POSITION_THRESHOLD = 0.33
 PR_CARD_DRIVERS_LICENSE_THRESHOLD = 0.5
 
 # ------------------------------------------------------------
@@ -147,12 +147,10 @@ def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[s
 # ------------------------------------------------------------
 def identification_service(image_url: str, register_info: dict) -> IdentificationResult:
     image = get_image(source='URL', imgURL=image_url)
-    aws = AWSService()
-    ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
-    norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
+    
     reasons: List[str] = []
     doc: List[str] = []
-
+    texts = []
     valid = False
     notify_manually_check = False
     update_success = False
@@ -167,11 +165,32 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
     course = register_info.get("Course", "")
 
     try:
-        texts = [item["text"] for item in norm]
-        keyword_confidence = _keyword_in_ocr(texts)
-        drive_license_confidence = _keyword_in_drivers_license(texts)
+        local_ocr = local_image_to_text(image)
+        local_norm = normalize(local_ocr,image.shape[1], image.shape[0])
 
-        relative_position_confidence = _relative_position_rules(norm)
+        local_texts = [item["text"] for item in local_norm]
+        local_keyword_confidence = _keyword_in_ocr(local_texts)
+        local_relative_position_confidence = _relative_position_rules(local_norm)
+        local_drive_license_confidence = _keyword_in_drivers_license(local_texts)
+
+        if local_keyword_confidence > PR_CARD_KEYWORD_THRESHOLD and \
+            local_relative_position_confidence >= PR_CARD_POSITION_THRESHOLD and \
+                local_drive_license_confidence < PR_CARD_DRIVERS_LICENSE_THRESHOLD:
+            
+            texts = local_texts
+            keyword_confidence = local_keyword_confidence
+            relative_position_confidence = local_relative_position_confidence
+            drive_license_confidence = local_drive_license_confidence
+
+        else:
+            aws = AWSService()
+            ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
+            norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
+
+            texts = [item["text"] for item in norm]
+            keyword_confidence = _keyword_in_ocr(texts)
+            drive_license_confidence = _keyword_in_drivers_license(texts)
+            relative_position_confidence = _relative_position_rules(norm)
          
         # ✅ PR Card
         if keyword_confidence > PR_CARD_KEYWORD_THRESHOLD:
@@ -245,7 +264,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         return result
     except Exception as e:
         reasons += [str(e)]
-        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=[item["text"] for item in norm])
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
         result = {**identification_result.__dict__, "update_success": False}
             
         formatted_reasons = "\n".join(reasons)
