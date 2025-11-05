@@ -44,8 +44,7 @@ def _relative_position_rules(normalized_results) -> float:
             gov_items.append(item)
         if re.search(r'canada', item["text"], re.IGNORECASE):
             canada_boxes.append(item)
-    print("Gov Items:", gov_items)
-    print("Canada Boxes:", canada_boxes)
+
     if not gov_items or not canada_boxes:
         return 0.0
 
@@ -56,7 +55,7 @@ def _relative_position_rules(normalized_results) -> float:
     # 3. Calculate the vertical ratio
     y_span = abs(bottom_canada["center_y"] - top_gov["center_y"])
     x_span = abs(bottom_canada["center_x"] - top_gov["center_x"])
-    print(f"Y Span: {y_span}, X Span: {x_span}")
+
     # 4. Calculate the Aspect Ratio (Height / Width)
     aspect_ratio = y_span / x_span
 
@@ -177,14 +176,12 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         if local_keyword_confidence > PR_CARD_KEYWORD_THRESHOLD and \
             local_relative_position_confidence >= PR_CARD_POSITION_THRESHOLD and \
                 local_drive_license_confidence < PR_CARD_DRIVERS_LICENSE_THRESHOLD:
-            print("Using local OCR results")
             texts = local_texts
             keyword_confidence = local_keyword_confidence
             relative_position_confidence = local_relative_position_confidence
             drive_license_confidence = local_drive_license_confidence
 
         else:
-            print("Using AWS OCR results")
             aws = AWSService()
             ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
             #norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
@@ -193,11 +190,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
             keyword_confidence = _keyword_in_ocr(texts)
             drive_license_confidence = _keyword_in_drivers_license(texts)
             relative_position_confidence = _relative_position_rules(ocr)
-        
-        print(f"Keyword Confidence: {keyword_confidence}, Relative Position Confidence: {relative_position_confidence}, Driver's License Confidence: {drive_license_confidence}")
-        print(f"Extracted Texts: {texts}")
-        print(f"Expected Name: {full_name}, Expected Card Number: {card_number}")
-        
+
         # ✅ PR Card
         if keyword_confidence > PR_CARD_KEYWORD_THRESHOLD:
             valid = True
