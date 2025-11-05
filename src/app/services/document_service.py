@@ -215,7 +215,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         id_info = {}
         if full_name and card_number:
             id_info = _get_id_info(texts, last_name,first_name, card_number)
-            if "full_name" not in id_info or "id_number" not in id_info:
+            if not info['full_name'] or not info['id_number']:
                 notify_manually_check = True
                 reasons.append(f"Full name or ID number does not match the input.")
                 valid = False
