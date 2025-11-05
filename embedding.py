@@ -1,12 +1,60 @@
+import os
+# Set BEFORE importing tokenizers / sentence-transformers to avoid parallelism spawning workers
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+import multiprocessing as mp
+mp.set_start_method("forkserver", force=True)
+
 import faiss
+from flask import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering
-import os
+import torch
+from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 INDEX_FILE = 'document_index.faiss'
-DOCUMENT_FILE = 'README.md'
-EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
+DOCUMENT_FILE = 'QA.md'
+EMBEDDING_MODEL = 'nomic-ai/nomic-embed-text-v1'
+
+import re
+from bs4 import BeautifulSoup
+
+def clean_markdown(text: str) -> str:
+    """
+    Cleans Markdown text to prepare for embedding.
+    Removes code blocks, links, HTML, and extra symbols.
+    """
+
+    # Remove fenced code blocks (```...```)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+
+    # Remove inline code like `code`
+    text = re.sub(r"`[^`]*`", "", text)
+
+    # Remove markdown links [text](url)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    # Remove images ![alt](url)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+
+    # Remove HTML tags (safety for copy-pasted docs)
+    text = BeautifulSoup(text, "html.parser").get_text()
+
+    # Remove markdown headers (#, ##, etc.)
+    text = re.sub(r"#+\s*", "", text)
+
+    # Remove list markers (*, -, +, 1.)
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+
+    # Replace multiple spaces/newlines with one
+    text = re.sub(r"\s+", " ", text).strip()
+
+     # Normalize whitespace and collapse excessive blank lines
+    text = re.sub(r"\r\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    return text
 
 def load_and_chunk_document(file_path, max_chars: int = 800, overlap: int = 200):
     """
@@ -24,66 +72,14 @@ def load_and_chunk_document(file_path, max_chars: int = 800, overlap: int = 200)
         print(f"Error: Document file not found at {file_path}")
         return []
 
-    # Normalize whitespace and collapse excessive blank lines
-    text = re.sub(r"\r\n", "\n", text)
-    text = re.sub(r"\n{3,}", "\n\n", text).strip()
-    if not text:
-        return []
+    header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=[("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3")])
+    sections = header_splitter.split_text(text)
 
-    # Split into paragraphs (logical blocks)
-    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    cleaned_sections = [clean_markdown(s.page_content) for s in sections]
 
-    chunks = []
-    for para in paras:
-        if len(para) <= max_chars:
-            chunks.append(para)
-            continue
-
-        # Sentence-split (lightweight regex). Prefer a sentence tokenizer if available.
-        sents = re.split(r"(?<=[\.\?\!])\s+", para)
-        cur = ""
-        for s in sents:
-            s = s.strip()
-            if not s:
-                continue
-            if len(cur) + 1 + len(s) <= max_chars:
-                cur = (cur + " " + s).strip() if cur else s
-            else:
-                if cur:
-                    chunks.append(cur)
-                # If single sentence is still too large, force-split by characters with overlap
-                if len(s) > max_chars:
-                    start = 0
-                    while start < len(s):
-                        part = s[start : start + max_chars]
-                        chunks.append(part.strip())
-                        start += max_chars - overlap if max_chars > overlap else max_chars
-                    cur = ""
-                else:
-                    cur = s
-        if cur:
-            chunks.append(cur)
-
-    # Create sliding windows over the concatenated chunks to ensure the requested overlap
-    if overlap > 0 and chunks:
-        full = "\n\n".join(chunks)
-        step = max(1, max_chars - overlap)
-        windows = []
-        for i in range(0, len(full), step):
-            w = full[i : i + max_chars].strip()
-            if w:
-                windows.append(w)
-        # Deduplicate very similar adjacent windows
-        dedup = []
-        prev = None
-        for w in windows:
-            if w != prev:
-                dedup.append(w)
-            prev = w
-        chunks = [c for c in dedup if len(c) > 20]
-
-    # Final cleanup
-    chunks = [c.strip() for c in chunks if c and len(c) > 20]
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
+    chunks = [c for sec in cleaned_sections for c in splitter.split_text(sec)]
+    chunks = list(dict.fromkeys(chunks))  # Remove duplicates while preserving order
     return chunks
 
 def create_index():
@@ -93,20 +89,27 @@ def create_index():
 
     print(f"Loaded {len(document_chunks)} chunks. Generating embeddings...")
     
-    model = SentenceTransformer(EMBEDDING_MODEL)
-    
-    embeddings = model.encode(document_chunks)
+    model = SentenceTransformer(EMBEDDING_MODEL,trust_remote_code=True)
+
+    embeddings = model.encode(document_chunks, device='cuda' if torch.cuda.is_available() else 'cpu')
+    # Normalize for cosine similarity
+    embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
     
     dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)  # L2 is Euclidean distance
+    index = faiss.IndexFlatIP(dimension)  # Inner Product is used for cosine similarity
     index.add(np.array(embeddings))
     
     faiss.write_index(index, INDEX_FILE)
     
     with open('document_chunks.txt', 'w', encoding='utf-8') as f:
         f.write('\n'.join(document_chunks))
-        
+    
+    import json
+    with open('document_chunks.json', 'w', encoding='utf-8') as f:
+        json.dump(document_chunks, f, ensure_ascii=False, indent=2)
+
     return model, document_chunks
 
-# Execute indexing once
-embedding_model, document_chunks = create_index()
+if __name__ == "__main__":
+    embedding_model, document_chunks = create_index()
+    print('Embedding dimension:', embedding_model.get_sentence_embedding_dimension())
