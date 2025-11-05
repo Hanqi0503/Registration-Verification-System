@@ -139,6 +139,49 @@ Additional configuration variables
 - Local development doubles as a CSV-backed datastore in `data/registration_data.csv` (managed by `app.services.database.init_csv`). The service resolves that path relative to the project root so running from other working directories still works.
 - For production or scalable scenarios, the app can use MongoDB (`pymongo`) — credentials are loaded from env and the `init_mongoDB` helper shows how to construct the client.
 
+## Database Column Reference
+
+This section explains each database column used in the Registration Verification System and its purpose in data storage and validation.
+
+- Form_ID — Retrieved from JotForm. This value stays the same for all submissions from the same form, helping group related registrations.
+
+- Full_Name — Participant’s name, collected from JotForm submission fields.
+
+- Email — Participant’s email address, taken directly from the JotForm form.
+
+- Phone_Number — Participant’s contact number from JotForm.
+
+- PR_Status — Boolean (true/false) flag from JotForm indicating if the registrant is a PR client. A value of true triggers OCR validation for PR card verification.
+
+- PR_Card_Number — Extracted from the JotForm submission. When PR_Status is true, this field is used to validate against numbers found in the uploaded PR card image.
+
+- PR_File_Upload_URLs — JotForm-hosted file URLs for uploaded PR card images. Requires JotForm API configuration to access.
+
+- Amount_of_Payment — Determined from webhook parameters `pr_amount` or `normal_amount` depending on PR status. Represents the expected payment amount.
+
+- Actual_Paid_Amount — Extracted from Zeffy payment notification emails. Used to cross-check against `Amount_of_Payment` by matching both `Course` and `Full_Name` in the database.
+
+- Payer_Full_Name — Currently not populated. Reserved for future use when mapping Zeffy payer details to the registration record.
+
+- Paid — Boolean that becomes true once a matching payment email is received. The `Payment_Status` field must also be verified to confirm correctness.
+
+- Payment_Status — Indicates whether the payment is both received and correct. Only set to true when `Paid` is true and the paid amount matches the expected amount.
+
+- Created_At — Timestamp automatically added when the JotForm submission is first received.
+
+- Updated_At — Updated whenever the record changes, such as after OCR validation or payment status updates.
+
+- PR_Card_Valid — Boolean indicating if OCR validation confirmed a valid PR card.
+
+- PR_Card_Valid_Confidence — Numerical confidence score derived from OCR keyword detection.
+
+- PR_Card_Details — Descriptive message summarizing OCR validation results (success or failure reasons).
+
+- Course — Course name submitted through JotForm.
+
+- Course_Date — Course date field, updated after receiving Zeffy payment email to reflect the final booking date.
+
+
 ## Background jobs
 
 - The payment watcher uses APScheduler to poll email notifications (see `src/app/background/payment_watcher.py`). Configure the interval via `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES` in `.env`.
@@ -333,23 +376,23 @@ These notifications alert staff to system failures, payment discrepancies, or va
 
 | Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **2.1** | **Review: Payment Mismatch (Payer Notified)** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. | ★★ |
-| **2.2** | **Review: Payment Mismatch (Payer Not UN-notified)** | 📧 | Payment mismatch occurred, but the system could not send the cancellation email (Email missing or invalid in the database). | Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. | ★★ |
-| **2.3** | **Review: Failed to Update Payment Record** | ❌ | System failed to locate or update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. | ★★ |
-| **2.4** | **Review: Payment Check - Other Error** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
+| **2.1** | **Manual Review Required for Zeffy Payment Checking** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. | ★★ |
+| **2.2** | **Manual Review Required for Zeffy Payment Checking** | 📧 | Payment mismatch occurred, but the system could not send the cancellation email (Email missing or invalid in the database). | Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. | ★★ |
+| **2.3** | **Manual Review Required for Zeffy Payment Checking** | ❌ | System failed to locate or update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. | ★★ |
+| **2.4** | **Manual Review Required for Zeffy Payment Checking** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
 
 ### 3. PR Card Verification Errors (OCR)
 
 | Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **5.1** | **PR Card Check Confidence HIGH** | ✅ | OCR confidence score for the PR Card is above the acceptance threshold, proving it's a real PR card. | None. The card is implicitly approved. | ★ |
-| **5.2** | **Review: Hand-Written Note Detected** | ✍️ | OCR detected minimal structured text; the upload is likely a hand-written note or a heavily processed image. | Manually check the uploaded PR Card file. | ★★ |
-| **5.3** | **Review: Driver’s Licence Cues Detected** | 🚫 | OCR detected features consistent with a driver’s licence instead of a PR Card. | Manually check the uploaded file to confirm the document type. | ★★ |
-| **5.4** | **Review: Low PR Card Keyword Confidence** | ❓ | The confidence score for identifying the image as a PR Card is below the threshold. | Manually check the uploaded file. | ★★ |
-| **5.5** | **Review: ID/Name Mismatch** | 🔀 | The name or ID number extracted from the PR Card image does not match the information entered in the registration form. | Manually verify the PR Card information against the form data in the database. | ★★ |
-| **5.6** | **Review: Cannot Extract ID Number** | 📸 | The uploaded image is too blurry, cropped, or dark to extract the ID number. | Manually check the uploaded file for clarity. | ★★ |
-| **5.7** | **Review: Failed to Update OCR Database** | 🔄 | System failed to update the database record after OCR, possibly due to a missing or duplicated record. | Manually check the database to resolve the record issue. | ★★ |
-| **5.8** | **Review: OCR - Other Error** | ❓ | An unknown error occurred during PR Card processing. | N/A (Contact IT). | ★★★ |
+| **3.1** | **Manual Review Required for PR Card Verification** | ✅ | OCR confidence score for the PR Card is above the acceptance threshold, proving it's a real PR card. | None. The card is implicitly approved. | ★ |
+| **3.2** | **Manual Review Required for PR Card Verification** | ✍️ | OCR detected minimal structured text; the upload is likely a hand-written note or a heavily processed image. | Manually check the uploaded PR Card file. | ★★ |
+| **3.3** | **Manual Review Required for PR Card Verification** | 🚫 | OCR detected features consistent with a driver’s licence instead of a PR Card. | Manually check the uploaded file to confirm the document type. | ★★ |
+| **3.4** | **Manual Review Required for PR Card Verification** | ❓ | The confidence score for identifying the image as a PR Card is below the threshold. | Manually check the uploaded file. | ★★ |
+| **3.5** | **Manual Review Required for PR Card Verification** | 🔀 | The name or ID number extracted from the PR Card image does not match the information entered in the registration form. | Manually verify the PR Card information against the form data in the database. | ★★ |
+| **3.6** | **Manual Review Required for PR Card Verification** | 📸 | The uploaded image is too blurry, cropped, or dark to extract the ID number. | Manually check the uploaded file for clarity. | ★★ |
+| **3.7** | **Manual Review Required for PR Card Verification** | 🔄 | System failed to update the database record after OCR, possibly due to a missing or duplicated record. | Manually check the database to resolve the record issue. | ★★ |
+| **3.8** | **Manual Review Required for PR Card Verification** | ❓ | An unknown error occurred during PR Card processing. | N/A (Contact IT). | ★★★ |
 
 ---
 
@@ -359,9 +402,9 @@ These notifications are for staff awareness and require minimal to no immediate 
 
 | Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **3.1** | **[\*Course Name\*] Registration Confirmed** | ✅ | Client's registration, identification, and payment are all confirmed and valid. | None. The process is complete. | ★ |
-| **4.1** | **[\*Course Name\*] OCR Validation Passed** | ✅ | PR client registered, and the PR Card OCR validation was successful. | Await payment confirmation. | ★ |
-| **4.2** | **[\*Course Name\*] No OCR Validation Needed** | ✅ | Non-PR client registered. | Await payment confirmation. | ★ |
+| **4.1** | **[\*Course Name\*] Registration Confirmation: Registration Confirmation: ALL Validation Passed Successfully!** | ✅ | Client's registration, identification, and payment are all confirmed and valid. | None. The process is complete. | ★ |
+| **4.1** | **[\*Course Name\*] Registration Confirmation: OCR Validation Passed Successfully!** | ✅ | PR client registered, and the PR Card OCR validation was successful. | Await payment confirmation. | ★ |
+| **4.2** | **[\*Course Name\*] Registration Confirmation: No OCR Validation Needed** | ✅ | Non-PR client registered. | Await payment confirmation. | ★ |
 
 ---
 
@@ -371,8 +414,8 @@ These are the emails sent directly to the client.
 
 | Subject | Emoji Key | Reason & Key Message | Status |
 | :--- | :--- | :--- | :--- |
-| **Action Required: Payment Mismatch for Course Registration** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
-| **Confirmation: Your Spot in [\*Course Name\*] is Secured!** | ✅ | All registration details and payment validations have passed. Your spot in the course is confirmed. | **Confirmed** |
+| **Course Payment Amount Mismatch - Action Required** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
+| **[\*Course Name\*] Registration Confirmation: Registration Confirmation: ALL Validation Passed Successfully!** | ✅ | All registration details and payment validations have passed. Your spot in the course is confirmed. | **Confirmed** |
 
 
 ## Development tips & common troubleshooting

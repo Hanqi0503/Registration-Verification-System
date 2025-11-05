@@ -156,7 +156,7 @@
 
             } catch (error) {
                 console.error('Error sending message:', error);
-                appendMessage('bot', '❌ 抱歉，连接到 API 时出现错误，请检查后端服务。');
+                appendMessage('bot', '❌ Sorry there is an error. Please try again later.');
             } finally {
                 sendButton.disabled = false;
                 userInput.disabled = false;
