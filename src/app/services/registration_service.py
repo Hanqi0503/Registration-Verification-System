@@ -44,7 +44,9 @@ def registration_service(data, pr_amount, normal_amount):
     # Extract form ID from slug
     form_id = extract_form_id(_get_value_by_partial_key(data, FORM_ID))
     # Extract personal information
-    full_name = f"{_get_value_by_partial_key(data, NAME)[FIRST]} {_get_value_by_partial_key(data, NAME)[LAST]}"
+    first_name = _get_value_by_partial_key(data, NAME)[FIRST]
+    last_name = _get_value_by_partial_key(data, NAME)[LAST]
+    full_name = f"{first_name} {last_name}"
     email = _get_value_by_partial_key(data, EMAIL)
     phone_number = _get_value_by_partial_key(data, PHONE).get(FULL)
     payer_full_name = f"{_get_value_by_partial_key(data, PAYER_NAME)[FIRST]} {_get_value_by_partial_key(data, PAYER_NAME)[LAST]}"
@@ -64,6 +66,8 @@ def registration_service(data, pr_amount, normal_amount):
     registration_data = {
         'Form_ID': form_id,
         'Full_Name': full_name,
+        'First_Name': first_name,
+        'Last_Name': last_name,
         'Email': email,
         'Phone_Number': phone_number,
         'PR_Status': pr_status,
