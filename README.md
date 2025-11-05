@@ -407,11 +407,21 @@ The following issues represent limitations in the current system logic, primaril
 | :--- | :--- | :--- |
 | If a client registers for a course date via **Jotform (Date A)** but then manually selects a different date/product via **Zeffy (Date B)**, the final database record currently reflects **Date A** (the Jotform submission), creating a booking error. | **Payment-Driven Date Correction.** Implement logic to compare the registered course/date (from Jotform) with the final course/date identifier in the **Zeffy payment notification**. If a discrepancy exists, the system should **override the Jotform date** and update the database record to reflect the date selected during the **Zeffy payment process (Date B)**, as this confirms the client's final purchase intention. | **Medium** |
 
+---
+
 ### 4. Upload image orientation & format
 
 | Current Limitation | Proposed Future Fix | Priority |
 | :--- | :--- | :--- |
-| Uploaded PR card images may be portrait/rotated or submitted as PDFs, causing OCR and heuristic failures. | Enforce image-only uploads (reject PDFs) and require the card to be uploaded in landscape orientation with the Canadian flag / "Government of Canada" text positioned at the top. Add validation in the upload pipeline to: (1) reject non-image MIME types (e.g., application/pdf), (2) check image orientation (width >= height) and attempt auto-rotation using EXIF when possible, and (3) return a clear client-facing error instructing the user to upload a JPG/PNG image of the PR card in landscape orientation with the flag at the top if validation fails. | High |
+| Uploaded PR card images may be portrait/rotated or submitted as PDFs, causing OCR and heuristic failures. | Enforce image-only uploads (reject PDFs) and require the card to be uploaded in landscape orientation with the Canadian flag / "Government of Canada" text positioned at the top. Add validation in the upload pipeline to: (1) reject non-image MIME types (e.g., application/pdf), (2) check image orientation (width >= height) and attempt auto-rotation using EXIF when possible, and (3) return a clear client-facing error instructing the user to upload a JPG/PNG image of the PR card in landscape orientation with the flag at the top if validation fails. | **High** |
+
+---
+
+### 5. PR Confirmation Letter (NOT YET IMPLEMENTED)
+
+| Current Limitation | Proposed Future Fix | Priority |
+| :--- | :--- | :--- |
+| The system does not yet process PR Confirmation Letters because business rules are unclear (for example: where/how the PR Card Number appears on the confirmation letter). | Defer implementation until business rules are clarified. When rules are provided, implement extraction heuristics (OCR + regex / field anchors) for the confirmation letter and map extracted fields to the registration record. Consider a staged approach: (1) collect sample confirmation-letter images from stakeholders, (2) derive reliable anchors or templates for locating the PR Card Number, (3) build and test OCR + post-processing rules, and (4) add automated validation and manual-review fallback. | Medium |
 
 ## Git / secrets
 
