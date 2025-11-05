@@ -68,7 +68,7 @@ def local_image_to_text(image):
         list:  OCR results with text and bounding boxes.
     """
 
-    image = image_preprocess(image)
+    #image = image_preprocess(image)
 
     boxes = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
 
@@ -85,7 +85,9 @@ def local_image_to_text(image):
                 "y1": y,
                 "x2": x + w,
                 "y2": y + h,
-            }
+            },
+            "center_y": (y + y + h) / 2,
+            "center_x": (x + x + w) / 2
         }
         ocr_result.append(item)
 
@@ -100,7 +102,7 @@ def ninja_image_to_text(image):
         list: OCR results with text and bounding boxes. 
     """
 
-    image = image_preprocess(image)
+    #image = image_preprocess(image)
 
     if isinstance(image, np.ndarray):
         image = np.ascontiguousarray(image)
