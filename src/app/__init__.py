@@ -1,7 +1,7 @@
 from flask import Flask
 
 from app.config.config import Config
-from app.services.database import init_csv
+from app.services.database import init_google_sheet
 from app.routes import register_blueprints
 from app.background import start_payment_job
 from app.extensions.mail import mail
@@ -18,7 +18,7 @@ def create_app(config_object: Optional[str] = None):
 
     mail.init_app(app)
 
-    app.db = init_csv()
+    app.db = init_google_sheet()
     #start_payment_job()
     register_blueprints(app)
     return app

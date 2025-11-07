@@ -86,6 +86,12 @@ class Config:
     NINJA_API_URL = 'https://api.api-ninjas.com/v1/imagetotext'
     NINJA_API_KEY = os.getenv('NINJA_API_KEY')
 
+    # Google Sheets
+    GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+    GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+    GOOGLE_SPREADSHEET_ID = os.getenv('GOOGLE_SPREADSHEET_ID')
+    GOOGLE_WORKSHEET_NAME = os.getenv('GOOGLE_WORKSHEET_NAME')
+
     @classmethod
     def validate_required(cls) -> None:
         """
