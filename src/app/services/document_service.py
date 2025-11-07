@@ -12,7 +12,7 @@ from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # Thresholds
 # ------------------------------------------------------------
 
-PR_CARD_KEYWORD_THRESHOLD = 0.8
+PR_CARD_KEYWORD_THRESHOLD = 0.77
 PR_CARD_POSITION_THRESHOLD = 0.33
 PR_CARD_DRIVERS_LICENSE_THRESHOLD = 0.5
 
@@ -78,6 +78,7 @@ def _keyword_in_ocr(texts) -> float:
         "perm_res_card": ["permanent", "resident", "card"],
         "name_label": ["name", "nom"],
         "id_label": ["id no","no id"],
+        "id_number": [r"\d{2}-\d{4}-\d{4}",r"\d{4}-\d{4}"],
         "nationality_label": ["nationality","nationalité"],
         "canada": ["canada"],
         "dob": ["date of birth", "date de naissance"],
