@@ -162,6 +162,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
     form_id = register_info.get("Form_ID", "")
     submission_id = register_info.get("Submission_ID", "")
     course = register_info.get("Course", "")
+    course_date = register_info.get("Course_Date", "")
 
     try:
         local_ocr = local_image_to_text(image)
@@ -230,8 +231,8 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
         update_success = update_to_csv(
             card_info, 
-            match_column=["Full_Name","PR_Card_Number","Course","Paid"], 
-            match_value=[full_name,card_number,course,""])
+            match_column=["Full_Name","PR_Card_Number","Course","Course_Date","Paid"], 
+            match_value=[full_name,card_number,course,course_date,""])
 
         if not update_success:
             notify_manually_check = True
