@@ -73,7 +73,7 @@ def init_google_sheet(
         worksheet_name: Worksheet/tab name (defaults to config or first sheet).
         credentials_file: Path to the service account JSON key file.
         credentials_json: Raw JSON credentials string.
-
+        ''
     Returns:
         dict: Contains the authorized client, worksheet, and cached headers.
     """

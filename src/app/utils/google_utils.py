@@ -55,7 +55,7 @@ def init_sheet(
         worksheet_name: Specific worksheet/tab name (defaults to the first sheet).
         credentials_file: Path to the service account JSON file.
         credentials_json: Raw JSON string for the service account.
-
+        ''
     Returns:
         dict: Dictionary containing the authorized client, worksheet, and header list.
     """
