@@ -14,7 +14,7 @@ from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharact
 
 INDEX_FILE = 'document_index.faiss'
 DOCUMENT_FILE = 'QA.md'
-EMBEDDING_MODEL = 'nomic-ai/nomic-embed-text-v1'
+EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 
 import re
 from bs4 import BeautifulSoup
@@ -89,7 +89,7 @@ def create_index():
 
     print(f"Loaded {len(document_chunks)} chunks. Generating embeddings...")
     
-    model = SentenceTransformer(EMBEDDING_MODEL,trust_remote_code=True)
+    model = SentenceTransformer(EMBEDDING_MODEL)
 
     embeddings = model.encode(document_chunks, device='cuda' if torch.cuda.is_available() else 'cpu')
     # Normalize for cosine similarity

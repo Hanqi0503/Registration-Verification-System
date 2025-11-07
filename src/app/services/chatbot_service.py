@@ -18,7 +18,7 @@ EMBEDDING_DIR = Path(__file__).resolve().parents[2] / 'data' / 'embedding'
 INDEX_FILE = EMBEDDING_DIR / 'document_index.faiss'
 CHUNKS_FILE = EMBEDDING_DIR / 'document_chunks.json'
 
-EMBEDDING_MODEL = 'nomic-ai/nomic-embed-text-v1'
+EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 
 # This is a good, small, extractive QA model (BERT-based)
 QA_MODEL_NAME = 'bert-large-uncased-whole-word-masking-finetuned-squad'
@@ -37,7 +37,7 @@ class HybridRerankRetriever:
         rerank_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
     ):
         # 1️⃣ Load embedding model
-        self.embed_model = SentenceTransformer(embed_model_path, trust_remote_code=True)
+        self.embed_model = SentenceTransformer(embed_model_path)
         # 2️⃣ Load FAISS index
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"❌ FAISS index not found: {index_path}")
