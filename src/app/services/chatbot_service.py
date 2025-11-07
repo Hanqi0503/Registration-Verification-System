@@ -66,12 +66,12 @@ class HybridRerankRetriever:
         # Semantic search via FAISS
         q_emb = self.embed_model.encode([query], device=device)
         q_emb = q_emb / np.linalg.norm(q_emb, axis=1, keepdims=True)
-        scores, idxs = self.index.search(q_emb, k)
+        scores, idxs = self.index.search(q_emb, k) # A 2D array (matrix) containing the similarity scores or distances between the query vector(s) and the found nearest neighbor document vectors.
         faiss_results = [(int(i), float(scores[0][n])) for n, i in enumerate(idxs[0])]
 
         # Lexical search via BM25
         bm25_scores = self.bm25.get_scores(query.lower().split())
-        bm25_top = np.argsort(bm25_scores)[::-1][:k]
+        bm25_top = np.argsort(bm25_scores)[::-1][:k] #returns the indices
         bm25_results = [(int(i), float(bm25_scores[i])) for i in bm25_top]
 
         # Merge with weighting
