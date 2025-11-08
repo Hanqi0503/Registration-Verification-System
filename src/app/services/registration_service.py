@@ -42,6 +42,7 @@ def registration_service(data, pr_amount, normal_amount):
     PR_CARD_URL = "clearFront"
     E_TRANSFER_URL = "uploadEtransfer"
     COURSE = "course"
+    PAYMENTLINK = "paymentlink"
 
     # Extract form ID from slug
     form_id = extract_form_id(_get_value_by_partial_key(data, FORM_ID))
@@ -54,6 +55,7 @@ def registration_service(data, pr_amount, normal_amount):
     payer_full_name = f"{_get_value_by_partial_key(data, PAYER_NAME)[FIRST]} {_get_value_by_partial_key(data, PAYER_NAME)[LAST]}"
     type_of_status = _get_value_by_partial_key(data, TYPE_OF_STATUS)
     full_course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
+    payment_link = _get_value_by_partial_key(data, PAYMENTLINK)
     date_pattern = r'\d{4}\.\d{1,2}\.\d{1,2}\([A-Za-z]{3}\)'
     match = re.search(date_pattern, full_course)
     if match:
@@ -86,7 +88,8 @@ def registration_service(data, pr_amount, normal_amount):
         'PR_File_Upload_URLs': pr_file_upload_urls if pr_status else None,
         'Payer_Full_Name': payer_full_name,
         'Course': course,
-        'Course_Date': course_date
+        'Course_Date': course_date,
+        'Payment_Link': payment_link
     }
     if E_TRANSFER_URL in data:
         e_transfer_file_upload_urls = process_file_uploads(data, E_TRANSFER_URL)

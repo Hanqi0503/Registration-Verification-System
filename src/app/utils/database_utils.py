@@ -18,7 +18,7 @@ def save_to_db(collection_name: str, data: dict) -> dict:
         dict: The inserted document (with _id).
     """
     db = current_app.db  # uses app.db from your init_db()
-    data["created_at"] = datetime.utcnow()
+    data["created_at"] = datetime.utcnow().strftime('%Y-%m-%d')
 
     result = db[collection_name].insert_one(data)
     data["_id"] = str(result.inserted_id)
@@ -53,7 +53,7 @@ def add_to_csv(data: dict) -> bool:
     rec = {}
     for col in df.columns:
         if col.lower() == "created_at":
-            rec[col] = data.get(col, datetime.utcnow().isoformat())
+            rec[col] = data.get(col, datetime.utcnow().strftime('%Y-%m-%d'))
         else:
             if col in data:
                 rec[col] = data[col]
