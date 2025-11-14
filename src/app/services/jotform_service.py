@@ -23,7 +23,7 @@ def jotform_service(data, pr_amount, normal_amount):
         except Exception as e:
             identification_data = {"status": "error", "message": str(e)}
 
-        if not registration_data.get("status") == "error" and identification_data.get("is_valid") == True :
+        if not registration_data.get("status") == "error" and identification_data.get("is_valid") == True and  identification_data.get("update_success") == True:
             info = {
                 "Form_ID": registration_data.get("Form_ID", ""),
                 "Submission_ID": registration_data.get("Submission_ID", ""),
