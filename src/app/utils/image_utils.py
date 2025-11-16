@@ -50,7 +50,6 @@ def get_image(source = 'URL', imgURL = None, imgPath = None):
     Returns:
         The image as a NumPy array.
     """
-    print(f"Fetching image from {source}...")
     if source == 'URL':
         image_bytes = fetch_image_bytes(imgURL)
         image = bytes_to_cv2(image_bytes)

@@ -99,7 +99,7 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
 
             target_amount = rows[0].get("Amount_of_Payment")
 
-            if float(target_amount) == actual_amount:
+            if float(target_amount) <= actual_amount:
                 payment_info['Payment_Status'] = True
 
             update_success = update_to_csv(payment_info, match_column=["Full_Name", "Course","Course_Date", "Paid"], match_value=[full_name,rows[0].get("Course"), rows[0].get("Course_Date"), ""])
