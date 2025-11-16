@@ -12,7 +12,7 @@ from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # Thresholds
 # ------------------------------------------------------------
 
-PR_CARD_KEYWORD_THRESHOLD = 0.8
+PR_CARD_KEYWORD_THRESHOLD = 0.77
 PR_CARD_POSITION_THRESHOLD = 0.33
 PR_CARD_DRIVERS_LICENSE_THRESHOLD = 0.5
 
@@ -78,6 +78,7 @@ def _keyword_in_ocr(texts) -> float:
         "perm_res_card": ["permanent", "resident", "card"],
         "name_label": ["name", "nom"],
         "id_label": ["id no","no id"],
+        "id_number": [r"\d{2}-\d{4}-\d{4}",r"\d{4}-\d{4}"],
         "nationality_label": ["nationality","nationalité"],
         "canada": ["canada"],
         "dob": ["date of birth", "date de naissance"],
@@ -115,22 +116,25 @@ def _get_id_info(texts,last_name: str,first_name: str,id_number: str) -> str:
     id_pattern = id_number
     last_name_pattern = last_name.strip()
     first_name_pattern = first_name.strip()
-    id_number = ""
-    first_name = ""
-    last_name = ""
+    found_id_number = ""
+    found_first_name = ""
+    found_last_name = ""
     info = {}
 
     for t in texts:
-        if id_number and first_name and last_name:
+        if found_id_number and found_first_name and found_last_name:
             break
         if re.search(id_pattern, t, re.IGNORECASE):
-            id_number = re.search(id_pattern, t, re.IGNORECASE).group(0)
+            found_id_number = re.search(id_pattern, t, re.IGNORECASE).group(0)
         if first_name_pattern and re.search(first_name_pattern, t, re.IGNORECASE):
-            first_name = re.search(first_name_pattern, t, re.IGNORECASE).group(0)
+            found_first_name = re.search(first_name_pattern, t, re.IGNORECASE).group(0)
         if last_name_pattern and re.search(last_name_pattern, t, re.IGNORECASE):
-            last_name = re.search(last_name_pattern, t, re.IGNORECASE).group(0)
-    info['id_number'] = id_number
-    info['full_name'] = f"{first_name} {last_name}".strip()
+            found_last_name = re.search(last_name_pattern, t, re.IGNORECASE).group(0)
+    info['id_number'] = found_id_number
+    if not found_first_name or not found_last_name:
+        info['full_name'] = ""
+    else:
+        info['full_name'] = f"{found_first_name} {found_last_name}".strip()
     return info
 
 def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[str, Any]:
@@ -162,6 +166,8 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
     form_id = register_info.get("Form_ID", "")
     submission_id = register_info.get("Submission_ID", "")
     course = register_info.get("Course", "")
+    course_date = register_info.get("Course_Date", "")
+
     try:
         local_ocr = local_image_to_text(image)
         #local_norm = normalize(local_ocr,image.shape[1], image.shape[0])
@@ -229,8 +235,8 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
         update_success = update_to_csv(
             card_info, 
-            match_column=["Full_Name","PR_Card_Number","Course","Paid"], 
-            match_value=[full_name,card_number,course,""])
+            match_column=["Full_Name","PR_Card_Number","Course","Course_Date","Paid"], 
+            match_value=[full_name,card_number,course,course_date,""])
 
         if not update_success:
             notify_manually_check = True

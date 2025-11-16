@@ -3,10 +3,11 @@ from app.utils.imap_utils import connect_gmail, create_inform_client_success_ema
         create_inform_staff_error_email_body, \
         create_inform_staff_success_email_body
 from app.utils.database_utils import update_to_csv, get_from_csv
+from flask import current_app
 import re
 from datetime import date
 from typing import Optional
-from flask import current_app
+from datetime import datetime
 
 def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> list[dict]:
     '''
@@ -62,7 +63,7 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
                     "update_success": False,
                     "message": "Cannot determine actual paid amount, manual review needed",
                     "email_subject": email_data['subject'],
-                    "full_name": payment_info.get("Payer_Full_Name")
+                    "full_name": payment_info.get("Full_Name")
                 })
 
                 continue
@@ -80,10 +81,10 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
                 continue
 
             # Fetch with the payer full name and not yet marked as paid
-            rows = get_from_csv(match_column=["Full_Name", "Course", "Paid"], match_value=[full_name, payment_info.get("Course"), ""])
+            rows = get_from_csv(match_column=["Full_Name", "Course", "Course_Date", "Paid"], match_value=[full_name, payment_info.get("Course"), payment_info.get("Course_Date"), ""])
             
             if not rows:
-                rows = get_from_csv(match_column=["Full_Name", "Course", "Paid", "Payment_Status"], match_value=[full_name, payment_info.get("Course"), True,False])
+                rows = get_from_csv(match_column=["Full_Name", "Course", "Course_Date", "Paid", "Payment_Status"], match_value=[full_name, payment_info.get("Course"), payment_info.get("Course_Date"), True,False])
 
             if not rows or len(rows) != 1:
                 notify_manually_check = True
@@ -98,12 +99,12 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
 
             target_amount = rows[0].get("Amount_of_Payment")
 
-            if float(target_amount) == actual_amount:
+            if float(target_amount) <= actual_amount:
                 payment_info['Payment_Status'] = True
 
-            update_success = update_to_csv(payment_info, match_column=["Full_Name", "Course", "Paid"], match_value=[payment_info.get("Full_Name"),rows[0].get("Course"), ""])
+            update_success = update_to_csv(payment_info, match_column=["Full_Name", "Course","Course_Date", "Paid"], match_value=[full_name,rows[0].get("Course"), rows[0].get("Course_Date"), ""])
             if not update_success:
-                update_success = update_to_csv(payment_info,match_column=["Full_Name", "Course", "Paid", "Payment_Status"], match_value=[full_name, payment_info.get("Course"), True,False])
+                update_success = update_to_csv(payment_info,match_column=["Full_Name", "Course", "Course_Date", "Paid", "Payment_Status"], match_value=[full_name, rows[0].get("Course"), rows[0].get("Course_Date"), True,False])
 
             results.append({**payment_info, "update_success": update_success})
             print("Payment processing result:", {**payment_info, "update_success": update_success})
@@ -142,7 +143,7 @@ def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keywo
             else:
                 # Step 9: Send notification email to client if all info validated
                 print("Payment Status is True, amount match")
-                final_rows = get_from_csv(match_column=["Full_Name", "Course", "Paid","Payment_Status","Created_At"], match_value=[full_name, rows[0].get("Course"), True,True, rows[0].get("Created_At")])
+                final_rows = get_from_csv(match_column=["Full_Name", "Course","Course_Date", "Paid","Payment_Status","Created_At"], match_value=[full_name, rows[0].get("Course"), rows[0].get("Course_Date"), True,True, rows[0].get("Created_At")])
 
                 if len(final_rows) == 1:
                     if (final_rows[0].get("PR_Status") and final_rows[0].get("PR_Card_Valid")) \
@@ -234,7 +235,7 @@ def payment_service(from_email: str, subject_keyword: str, since_date: Optional[
         since_date (date): Only search for emails since this date
 
     Returns:
-        dict: data including updated form_id, payment status, payer_full_name, amount_of_payment, unique_id.
+        dict: data including updated form_id, payment status, full_name, amount_of_payment, unique_id.
     '''
 
     # Get Gmail credentials from config
@@ -283,7 +284,6 @@ def extract_payment_info(email_body: str) -> dict:
             # Zeffy format is "Last, First" - keep as is
             payment_info['Full_Name'] = match.group(1).strip().replace(',', '')
             break
-    print("Extracted Full_Name:", payment_info.get('Full_Name'))
     # Extract amount - Real Zeffy format: "Total Amount Received" or "Paid amount"
     amount_patterns = [
         r"New\s*CA\$(\d+\.\d{2})"
@@ -298,24 +298,22 @@ def extract_payment_info(email_body: str) -> dict:
                 break
             except ValueError:
                 continue
-    print("Extracted Actual_Paid_Amount:", payment_info.get('Actual_Paid_Amount'))
     # Extract course date - Real Zeffy format: "November 9, 2025 at 4:00 PM EST"
     date_pattern = r"\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}\s+at\s+\d{1,2}:\d{2}\s+[AP]M\s+[A-Z]{3})"
     match = re.search(date_pattern, email_body, re.IGNORECASE)
     if match:
-        payment_info['Course_Date'] = match.group(1).strip()
-    print("Extracted Course_Date:", payment_info.get('Course_Date'))
+        date_str = match.group(1).strip()
+        parsed_date = datetime.strptime(date_str, "%B %d, %Y at %I:%M %p %Z")
+        payment_info['Course_Date'] = parsed_date.strftime("%Y-%m-%d")
     # Extract course name: Standard First Aid with CPR Level C & AED Certification @ UNI-Commons x CFSO
     course_pattern = r"^((?!.*New purchase).+?)\s*@ UNI-Commons x CFSO"
     match = re.search(course_pattern, email_body, re.MULTILINE)
     if match:
         payment_info['Course'] = match.group(1).strip()
-    print("Extracted Course:", payment_info.get('Course'))
     # Set payment status to True (paid) if we found key info
     if 'Full_Name' in payment_info and 'Actual_Paid_Amount' in payment_info:
         payment_info['Payment_Status'] = False  # Will be set to True after amount verification
         payment_info['Paid'] = True
-        print("Payment Info:",payment_info)
         return payment_info
     else:
         return None

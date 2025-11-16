@@ -3,7 +3,6 @@ from flask import Flask
 from app.config.config import Config
 from app.services.database import init_csv
 from app.routes import register_blueprints
-from app.background import start_payment_job
 from app.extensions.mail import mail
 
 from typing import Optional
@@ -19,6 +18,5 @@ def create_app(config_object: Optional[str] = None):
     mail.init_app(app)
 
     app.db = init_csv()
-    #start_payment_job()
     register_blueprints(app)
     return app

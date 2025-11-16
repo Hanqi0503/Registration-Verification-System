@@ -3,6 +3,8 @@ from app.utils.extraction_tools import extract_form_id, extract_submission_id
 from app.utils.database_utils import add_to_csv
 from app.utils.file_utils import process_file_uploads
 from app.utils.imap_utils import create_inform_staff_error_email_body, send_email
+import re
+from datetime import datetime
 
 def _get_value_by_partial_key(data_dict, partial_key):
     """Retrieves the value when only a substring of the key is known."""
@@ -40,6 +42,7 @@ def registration_service(data, pr_amount, normal_amount):
     PR_CARD_URL = "clearFront"
     E_TRANSFER_URL = "uploadEtransfer"
     COURSE = "course"
+    PAYMENTLINK = "paymentlink"
 
     # Extract form ID from slug
     form_id = extract_form_id(_get_value_by_partial_key(data, FORM_ID))
@@ -51,7 +54,22 @@ def registration_service(data, pr_amount, normal_amount):
     phone_number = _get_value_by_partial_key(data, PHONE).get(FULL)
     payer_full_name = f"{_get_value_by_partial_key(data, PAYER_NAME)[FIRST]} {_get_value_by_partial_key(data, PAYER_NAME)[LAST]}"
     type_of_status = _get_value_by_partial_key(data, TYPE_OF_STATUS)
-    course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
+    full_course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
+    payment_link = _get_value_by_partial_key(data, PAYMENTLINK)
+    date_pattern = r'(?:\d{4}\.)?\d{1,2}\.\d{1,2}\s*\([A-Za-z]{3}\)'
+    match = re.search(date_pattern, full_course)
+    if match:
+        date_part = match.group(0).split('(')[0].strip()
+        if date_part.count('.') == 2:
+            # format YYYY.MM.DD
+            course_date = datetime.strptime(date_part, '%Y.%m.%d').strftime('%Y-%m-%d')
+        else:
+            # format MM.DD or M.D -> prepend current year
+            course_date = datetime.strptime(f"{datetime.utcnow().year}.{date_part}", '%Y.%m.%d').strftime('%Y-%m-%d')
+        course = full_course[match.end():].strip()
+    else:
+        course_date = ""
+        course = full_course.strip()
     if "Yes I am" in type_of_status:
         pr_file_upload_urls = data.get(PR_CARD_URL) \
                                 if isinstance(data.get(PR_CARD_URL), list) \
@@ -76,6 +94,8 @@ def registration_service(data, pr_amount, normal_amount):
         'PR_File_Upload_URLs': pr_file_upload_urls if pr_status else None,
         'Payer_Full_Name': payer_full_name,
         'Course': course,
+        'Course_Date': course_date,
+        'Payment_Link': payment_link
     }
     if E_TRANSFER_URL in data:
         e_transfer_file_upload_urls = process_file_uploads(data, E_TRANSFER_URL)

@@ -140,7 +140,6 @@ def create_inform_staff_error_email_body(info: dict) -> str:
 
     return staff_email_body
 
-# Used ADMIN_EMAIL_USER
 def create_inform_client_payment_error_email_body(info: dict) -> str:
     
     client_email_body = render_template(
@@ -150,6 +149,30 @@ def create_inform_client_payment_error_email_body(info: dict) -> str:
         expected_amount=info['Expected Amount'],
         actual_amount=info['Actual Paid Amount'],
         support_contact=info['Support Contact'],
+    )
+
+    return client_email_body
+
+def create_inform_client_payment_reminder_email_body(info: dict) -> str:
+
+    client_email_body = render_template(
+        'inform_client_payment_reminder.html',
+        course = info['Course'],
+        full_name=info['Full_name'],
+        course_date=info['Course Date'],
+        payment_link=info['Payment Link'],
+        support_contact=info['Support Contact'],
+    )
+
+    return client_email_body
+
+def create_inform_staff_reminder_report_email_body(info: dict) -> str:
+
+    client_email_body = render_template(
+        'inform_staff_reminder_report.html',
+        details = info['Details'],
+        success= info['Success'],
+        fail= info["Fail"]
     )
 
     return client_email_body
