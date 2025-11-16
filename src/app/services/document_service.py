@@ -116,22 +116,25 @@ def _get_id_info(texts,last_name: str,first_name: str,id_number: str) -> str:
     id_pattern = id_number
     last_name_pattern = last_name.strip()
     first_name_pattern = first_name.strip()
-    id_number = ""
-    first_name = ""
-    last_name = ""
+    found_id_number = ""
+    found_first_name = ""
+    found_last_name = ""
     info = {}
 
     for t in texts:
-        if id_number and first_name and last_name:
+        if found_id_number and found_first_name and found_last_name:
             break
         if re.search(id_pattern, t, re.IGNORECASE):
-            id_number = re.search(id_pattern, t, re.IGNORECASE).group(0)
+            found_id_number = re.search(id_pattern, t, re.IGNORECASE).group(0)
         if first_name_pattern and re.search(first_name_pattern, t, re.IGNORECASE):
-            first_name = re.search(first_name_pattern, t, re.IGNORECASE).group(0)
+            found_first_name = re.search(first_name_pattern, t, re.IGNORECASE).group(0)
         if last_name_pattern and re.search(last_name_pattern, t, re.IGNORECASE):
-            last_name = re.search(last_name_pattern, t, re.IGNORECASE).group(0)
-    info['id_number'] = id_number
-    info['full_name'] = f"{first_name} {last_name}".strip()
+            found_last_name = re.search(last_name_pattern, t, re.IGNORECASE).group(0)
+    info['id_number'] = found_id_number
+    if not found_first_name or not found_last_name:
+        info['full_name'] = ""
+    else:
+        info['full_name'] = f"{found_first_name} {found_last_name}".strip()
     return info
 
 def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[str, Any]:

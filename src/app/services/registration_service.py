@@ -56,10 +56,16 @@ def registration_service(data, pr_amount, normal_amount):
     type_of_status = _get_value_by_partial_key(data, TYPE_OF_STATUS)
     full_course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
     payment_link = _get_value_by_partial_key(data, PAYMENTLINK)
-    date_pattern = r'\d{4}\.\d{1,2}\.\d{1,2}\([A-Za-z]{3}\)'
+    date_pattern = r'(?:\d{4}\.)?\d{1,2}\.\d{1,2}\s*\([A-Za-z]{3}\)'
     match = re.search(date_pattern, full_course)
     if match:
-        course_date = datetime.strptime(match.group(0).split('(')[0], '%Y.%m.%d').strftime('%Y.%m.%d')
+        date_part = match.group(0).split('(')[0].strip()
+        if date_part.count('.') == 2:
+            # format YYYY.MM.DD
+            course_date = datetime.strptime(date_part, '%Y.%m.%d').strftime('%Y-%m-%d')
+        else:
+            # format MM.DD or M.D -> prepend current year
+            course_date = datetime.strptime(f"{datetime.utcnow().year}.{date_part}", '%Y.%m.%d').strftime('%Y-%m-%d')
         course = full_course[match.end():].strip()
     else:
         course_date = ""

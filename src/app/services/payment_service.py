@@ -3,10 +3,10 @@ from app.utils.imap_utils import connect_gmail, create_inform_client_success_ema
         create_inform_staff_error_email_body, \
         create_inform_staff_success_email_body
 from app.utils.database_utils import update_to_csv, get_from_csv
+from flask import current_app
 import re
 from datetime import date
 from typing import Optional
-from flask import current_app
 from datetime import datetime
 
 def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> list[dict]:
@@ -304,7 +304,7 @@ def extract_payment_info(email_body: str) -> dict:
     if match:
         date_str = match.group(1).strip()
         parsed_date = datetime.strptime(date_str, "%B %d, %Y at %I:%M %p %Z")
-        payment_info['Course_Date'] = parsed_date.strftime("%Y.%m.%d")
+        payment_info['Course_Date'] = parsed_date.strftime("%Y-%m-%d")
     # Extract course name: Standard First Aid with CPR Level C & AED Certification @ UNI-Commons x CFSO
     course_pattern = r"^((?!.*New purchase).+?)\s*@ UNI-Commons x CFSO"
     match = re.search(course_pattern, email_body, re.MULTILINE)
