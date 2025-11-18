@@ -5,23 +5,26 @@ from datetime import datetime
 
 payment_bp = Blueprint("payment", __name__)
 
-@payment_bp.route("/check-payments", methods=["GET"])
+@payment_bp.route("/check-payment", methods=["POST"])
 def check_payments():
-    """Check for payments by scanning emails.
-    Query parameters:
-      - from: email address to filter by (default: Config.ZEFFY_EMAIL)
-      - subject: subject line to filter by (default: Config.ZEFFY_SUBJECT)
-      - since_date: date to filter emails since (optional)
+    """Check for payments by extracting from email body.
+    Args:
+        None (data comes from request)
     Returns:
-      - JSON object with count and results list.
+      - JSON response with status and detailed message.
     """
-    from_email = request.args.get("from", Config.ZEFFY_EMAIL)
-    subject = request.args.get("subject", Config.ZEFFY_SUBJECT)
-    since_date = request.args.get("since_date", None)
 
-    if since_date:
-        since_date = datetime.strptime(since_date, "%Y-%m-%d").date()
+    data = request.get_json()
+    if not data:
+      return jsonify({"error": "Missing JSON payload"}), 400
+    
+    id = data.get("id")
+    subject = data.get("subject")
+    body = data.get("body")
 
-    results = payment_service(from_email, subject, since_date=since_date)
+    if not body:
+      return jsonify({"error": "Missing email body"}), 400
 
-    return jsonify({"count": len(results), "results": results}), 200
+    result = payment_service(id, subject, body)
+
+    return jsonify(result), 200
