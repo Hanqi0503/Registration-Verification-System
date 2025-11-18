@@ -34,3 +34,5 @@ tmp/
 
 # Data files that may be generated locally (if you want to keep the example in repo, remove this)
 # data/
+
+credentials.json
