@@ -3,7 +3,7 @@ from app.utils.imap_utils import send_email, \
         create_inform_client_payment_error_email_body, \
         create_inform_staff_error_email_body, \
         create_inform_staff_success_email_body
-from app.utils.database_utils import update_to_csv, get_from_csv
+from app.utils.database_utils import update_to_sheet, get_from_sheet
 
 from flask import current_app
 
@@ -55,7 +55,7 @@ def payment_service(id, subject, body) -> dict:
         full_name = payment_info.get("Full_Name")
 
         # Fetch with the payer full name and not yet marked as paid -> Never paid before
-        rows = get_from_csv(
+        rows = get_from_sheet(
             match_column=[
                 "Full_Name", 
                 "Course", 
@@ -72,7 +72,7 @@ def payment_service(id, subject, body) -> dict:
         
         if not rows:
             # Fetch with the payer full name and marked as paid but payment status is False -> Paid before but need to correct the amount and repaid again
-            rows = get_from_csv(
+            rows = get_from_sheet(
                 match_column=[
                     "Full_Name", 
                     "Course", 
@@ -150,7 +150,7 @@ def payment_service(id, subject, body) -> dict:
             )
 
         # Step 5: Update the database record
-        update_success = update_to_csv(
+        update_success = update_to_sheet(
             payment_info, 
             match_column=[
                 "Full_Name", 
@@ -164,7 +164,7 @@ def payment_service(id, subject, body) -> dict:
                 rows[0].get("Course_Date"), 
                 ""
             ]
-        ) or update_to_csv(
+        ) or update_to_sheet(
                 payment_info,
                 match_column=[
                     "Full_Name", 
@@ -202,7 +202,7 @@ def payment_service(id, subject, body) -> dict:
  
         # Step 6: Send notification email to client if all info validated
 
-        final_rows = get_from_csv(
+        final_rows = get_from_sheet(
             match_column=[
                 "Full_Name", 
                 "Course",
