@@ -26,6 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Ensure Python can import the `app` package under /app/src
+# and allow gunicorn to chdir into src so module imports like `app` work.
+ENV PYTHONPATH=/app/src
+
 # Install Python deps
 COPY requirements.txt /app/
 RUN python -m pip install --upgrade pip setuptools wheel && \
@@ -41,4 +45,4 @@ USER appuser
 EXPOSE 5050
 
 # Use gunicorn as WSGI server; ensure src/main.py exposes `app` (app = create_app())
-CMD ["gunicorn", "src.main:app", "--bind", "0.0.0.0:5050", "--workers", "3", "--worker-class", "gthread", "--threads", "4", "--log-level", "info", "--config", "/app/gunicorn_conf.py"]
+CMD gunicorn src.main:app --chdir /app/src --bind 0.0.0.0:${PORT:-5050} --workers 3 --worker-class gthread --threads 4 --log-level info --access-logfile - --error-logfile -
