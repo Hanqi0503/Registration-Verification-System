@@ -12,12 +12,9 @@ def create_app(config_object: Optional[str] = None):
     app = Flask(__name__)
     app.config.from_object(config_object or Config)
 
-    # optional: fail fast if required env vars missing
-    #Config.validate_required()
-
     mail.init_app(app)
 
     app.db = init_google_sheet()
-    #start_payment_job()
+    
     register_blueprints(app)
     return app

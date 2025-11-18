@@ -19,6 +19,8 @@ class Config:
 
       - ERROR_NOTIFICATION_EMAIL: email address to send error notifications to
 
+      - GOOGLE_SPREADSHEET_ID: ID of the Google Spreadsheet to use
+      - GOOGLE_WORKSHEET_NAME: Name of the worksheet within the spreadsheet
     Optional:
       (only set then checking Zeffy payment notification emails in this mailbox)
       - CFSO_ADMIN_EMAIL_USER: CFSO admin email address for IMAP access
@@ -86,8 +88,6 @@ class Config:
 
 
     # Google Sheets
-    GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
-    GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
     GOOGLE_SPREADSHEET_ID = os.getenv('GOOGLE_SPREADSHEET_ID')
     GOOGLE_WORKSHEET_NAME = os.getenv('GOOGLE_WORKSHEET_NAME')
 

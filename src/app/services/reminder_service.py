@@ -1,11 +1,11 @@
-from app.utils.database_utils import get_from_csv
+from app.utils.database_utils import get_from_sheet
 from app.utils.imap_utils import create_inform_client_payment_reminder_email_body, create_inform_staff_reminder_report_email_body, send_email
 from flask import current_app
 from datetime import datetime, timedelta
 
 def reminder_nonpaid_email() -> str:
     yesterday = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
-    rows = get_from_csv(match_column=["Paid", "Created_At"], match_value=["",yesterday])
+    rows = get_from_sheet(match_column=["Paid", "Created_At"], match_value=["",yesterday])
     detail = []
     try:
         for row in rows:

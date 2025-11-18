@@ -1,82 +1,11 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List, Union
 import gspread
-from google.oauth2.service_account import Credentials
 from gspread.utils import rowcol_to_a1
+import numpy as np
 
-try:
-    import numpy as np
-except ImportError:  # pragma: no cover - numpy is an optional dependency at runtime
-    np = None  # type: ignore
-
-_SCOPES = ("https://www.googleapis.com/auth/spreadsheets",)
-
-
-def load_credentials(
-    credentials_file: Optional[str] = None,
-    credentials_json: Optional[str] = None,
-) -> Credentials:
-    """
-    Construct Google service account credentials either from a JSON file or raw JSON string.
-
-    Args:
-        credentials_file: Path to the credentials JSON file.
-        credentials_json: Raw JSON string containing credentials.
-
-    Returns:
-        Credentials: Authorized service account credentials.
-    """
-    if credentials_json:
-        info = json.loads(credentials_json)
-        return Credentials.from_service_account_info(info, scopes=_SCOPES)
-
-    if credentials_file:
-        return Credentials.from_service_account_file(credentials_file, scopes=_SCOPES)
-
-    raise RuntimeError(
-        "Google service account credentials are not configured. "
-        "Provide GOOGLE_SERVICE_ACCOUNT_FILE or GOOGLE_SERVICE_ACCOUNT_JSON."
-    )
-
-
-def init_sheet(
-    spreadsheet_id: str,
-    worksheet_name: Optional[str] = None,
-    credentials_file: Optional[str] = None,
-    credentials_json: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Initialize a Google Sheet client and return useful handles.
-
-    Args:
-        spreadsheet_id: Target Google Spreadsheet ID.
-        worksheet_name: Specific worksheet/tab name (defaults to the first sheet).
-        credentials_file: Path to the service account JSON file.
-        credentials_json: Raw JSON string for the service account.
-        ''
-    Returns:
-        dict: Dictionary containing the authorized client, worksheet, and header list.
-    """
-    credentials = load_credentials(credentials_file, credentials_json)
-    client = gspread.authorize(credentials)
-    spreadsheet = client.open_by_key(spreadsheet_id)
-    worksheet = spreadsheet.worksheet(worksheet_name) if worksheet_name else spreadsheet.sheet1
-
-    headers = fetch_headers(worksheet)
-    if not headers:
-        raise RuntimeError("The Google Sheet must contain a header row in the first row.")
-
-    return {"client": client, "sheet": worksheet, "headers": headers}
-
-
-def fetch_headers(sheet: gspread.Worksheet) -> List[str]:
-    """Return the header row (first row) as a list."""
-    return [h.strip() for h in sheet.row_values(1)]
-
-
-def append_record(sheet: gspread.Worksheet, headers: List[str], data: Dict[str, Any]) -> None:
+def append_record(sheet: gspread.Worksheet, headers: List[str], data: Dict[str, Any]) -> List[Any]:
     """
     Append a new record (row) to the worksheet using the provided header order.
 
@@ -87,13 +16,13 @@ def append_record(sheet: gspread.Worksheet, headers: List[str], data: Dict[str, 
     """
     row = _build_row(headers, data)
     sheet.append_row(row, value_input_option="USER_ENTERED")
-
+    return row
 
 def update_record(
     sheet: gspread.Worksheet,
     headers: List[str],
-    match_column: str,
-    match_value: Any,
+    match_column: Union[str, List[str]],
+    match_value: Union[Any, List[Any]],
     data: Dict[str, Any],
 ) -> bool:
     """
@@ -109,23 +38,53 @@ def update_record(
     Returns:
         bool: True when an update occurs, False when no matching row is found.
     """
-    headers = headers or fetch_headers(sheet)
+    headers = headers
     header_map = _header_map(headers)
-    target_header = header_map.get(match_column.lower())
 
-    if target_header is None:
-        raise ValueError(f"Column '{match_column}' does not exist in the Google Sheet.")
+    # normalize match_column and match_value to lists
+    if isinstance(match_column, str):
+        match_columns = [match_column]
+    else:
+        match_columns = list(match_column)
+
+    if not isinstance(match_value, list):
+        match_values = [match_value]
+    else:
+        match_values = list(match_value)
+
+    if len(match_columns) != len(match_values):
+        raise ValueError("match_column and match_value must have the same length")
+
+    # resolve target headers for each requested match column
+    target_headers: List[str] = []
+    for mc in match_columns:
+        th = header_map.get(mc.lower())
+        if th is None:
+            raise ValueError(f"Column '{mc}' does not exist in the Google Sheet.")
+        target_headers.append(th)
 
     values = sheet.get_all_values()
     if len(values) <= 1:
         return False
 
-    col_index = headers.index(target_header)
-    normalized_match = _normalize_string(match_value)
-
+    # iterate rows and find the first row where all target columns match the corresponding values
     for row_offset, row in enumerate(values[1:], start=2):
-        cell_value = row[col_index] if col_index < len(row) else ""
-        if _normalize_string(cell_value) != normalized_match:
+        all_match = True
+        for th, mv in zip(target_headers, match_values):
+            col_index = headers.index(th)
+            cell_value = row[col_index] if col_index < len(row) else ""
+
+            # treat empty/None match value as matching empty cells
+            if mv is None or str(mv).strip() == "":
+                if str(cell_value).strip() != "":
+                    all_match = False
+                    break
+            else:
+                if _normalize_string(cell_value) != _normalize_string(mv):
+                    all_match = False
+                    break
+
+        if not all_match:
             continue
 
         existing = _row_to_dict(headers, row)
@@ -151,8 +110,8 @@ def update_record(
 def find_records(
     sheet: gspread.Worksheet,
     headers: List[str],
-    match_column: str,
-    match_value: Any,
+    match_column: Union[str, List[str]],
+    match_value: Union[Any, List[Any]],
 ) -> List[Dict[str, Any]]:
     """
     Retrieve all rows matching the given value in the specified column.
@@ -166,38 +125,57 @@ def find_records(
     Returns:
         list[dict]: Matching rows converted into dictionaries.
     """
-    headers = headers or fetch_headers(sheet)
+    headers = headers
     header_map = _header_map(headers)
-    target_header = header_map.get(match_column.lower())
-    if target_header is None:
-        raise ValueError(f"Column '{match_column}' does not exist in the Google Sheet.")
+
+    # normalize match_column and match_value to lists
+    if isinstance(match_column, str):
+        match_columns = [match_column]
+    else:
+        match_columns = list(match_column)
+
+    if not isinstance(match_value, list):
+        match_values = [match_value]
+    else:
+        match_values = list(match_value)
+
+    if len(match_columns) != len(match_values):
+        raise ValueError("match_column and match_value must have the same length")
+
+    # resolve target headers for each requested match column
+    target_headers: List[str] = []
+    for mc in match_columns:
+        th = header_map.get(mc.lower())
+        if th is None:
+            raise ValueError(f"Column '{mc}' does not exist in the Google Sheet.")
+        target_headers.append(th)
 
     values = sheet.get_all_values()
     if len(values) <= 1:
         return []
 
-    col_index = headers.index(target_header)
-    normalized_match = _normalize_string(match_value)
     matches: List[Dict[str, Any]] = []
 
     for row in values[1:]:
-        cell_value = row[col_index] if col_index < len(row) else ""
-        if _normalize_string(cell_value) == normalized_match:
+        all_match = True
+        for th, mv in zip(target_headers, match_values):
+            col_index = headers.index(th)
+            cell_value = row[col_index] if col_index < len(row) else ""
+
+            # treat empty/None match value as matching empty cells
+            if mv is None or str(mv).strip() == "":
+                if str(cell_value).strip() != "":
+                    all_match = False
+                    break
+            else:
+                if _normalize_string(cell_value) != _normalize_string(mv):
+                    all_match = False
+                    break
+
+        if all_match:
             matches.append(_row_to_dict(headers, row))
 
     return matches
-
-
-def refresh_headers(cfg: Dict[str, Any]) -> None:
-    """
-    Refresh the cached header list from the worksheet and update the config dict in-place.
-
-    Args:
-        cfg: Dictionary containing at least a 'sheet' entry.
-    """
-    sheet = cfg.get("sheet")
-    if sheet:
-        cfg["headers"] = fetch_headers(sheet)
 
 
 def _header_map(headers: List[str]) -> Dict[str, str]:
