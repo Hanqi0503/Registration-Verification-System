@@ -8,6 +8,7 @@ import re
 from datetime import date
 from typing import Optional
 from datetime import datetime
+from dateutil import parser
 
 def payment_service_by_email(user: str, pwd: str, from_email: str, subject_keyword: str, since_date: Optional[date] = None) -> list[dict]:
     '''
@@ -303,7 +304,13 @@ def extract_payment_info(email_body: str) -> dict:
     match = re.search(date_pattern, email_body, re.IGNORECASE)
     if match:
         date_str = match.group(1).strip()
-        parsed_date = datetime.strptime(date_str, "%B %d, %Y at %I:%M %p %Z")
+        try:
+            # prefer dateutil (handles many TZ formats)
+            parsed_date = parser.parse(date_str)
+        except Exception:
+            # fallback: remove trailing timezone token and parse
+            no_tz = date_str.rsplit(' ', 1)[0]  # "November 16, 2025 at 9:30 AM"
+            parsed_date = datetime.strptime(no_tz, "%B %d, %Y at %I:%M %p")
         payment_info['Course_Date'] = parsed_date.strftime("%Y-%m-%d")
     # Extract course name: Standard First Aid with CPR Level C & AED Certification @ UNI-Commons x CFSO
     course_pattern = r"^((?!.*New purchase).+?)\s*@ UNI-Commons x CFSO"

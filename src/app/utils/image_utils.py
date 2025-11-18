@@ -175,7 +175,6 @@ def fetch_image_bytes(image_url: str) -> bytes:
         full_url = f"{image_url}{sep}apiKey={Config.JOTFORM_API_KEY}"
     else:
         full_url = image_url
-
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -183,12 +182,14 @@ def fetch_image_bytes(image_url: str) -> bytes:
             "Chrome/58.0.3029.110 Safari/537.3"
         )
     }
-    response = requests.get(full_url, headers=headers)
+    try:
+        response = requests.get(full_url, headers=headers, timeout=15)
+    except requests.RequestException as e:
+        raise
     try:
         response.raise_for_status()
     except requests.HTTPError:
         raise
-
     content_type = response.headers.get('Content-Type', '')
     # If the server returned an image Content-Type, return it directly.
     if 'image' in content_type:
