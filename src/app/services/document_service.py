@@ -148,7 +148,6 @@ def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[s
 # Main validator
 # ------------------------------------------------------------
 def identification_service(image_url: str, register_info: dict) -> IdentificationResult:
-    image = get_image(source='URL', imgURL=image_url)
     
     reasons: List[str] = []
     doc: List[str] = []
@@ -169,6 +168,8 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
     course_date = register_info.get("Course_Date", "")
 
     try:
+        image = get_image(source='URL', imgURL=image_url)
+
         local_ocr = local_image_to_text(image)
         #local_norm = normalize(local_ocr,image.shape[1], image.shape[0])
 
