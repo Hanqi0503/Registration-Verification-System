@@ -12,8 +12,8 @@ from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # Thresholds
 # ------------------------------------------------------------
 
-PR_CARD_KEYWORD_THRESHOLD = 0.5
-PR_CARD_POSITION_THRESHOLD = 0.5
+PR_CARD_KEYWORD_THRESHOLD = 0.77
+PR_CARD_POSITION_THRESHOLD = 0.33
 PR_CARD_DRIVERS_LICENSE_THRESHOLD = 0.5
 
 # ------------------------------------------------------------
@@ -31,53 +31,43 @@ PR_CONF_LETTER_KEYWORDS = [
 # Helper functions
 # ------------------------------------------------------------
 def _relative_position_rules(normalized_results) -> float:
+    """
+    Calculates a confidence score based on the vertical ratio between the 
+    top-most 'government' item and the bottom-most 'canada' item.
+    """
     gov_items = []
     canada_boxes = []
-    perm_boxes = []
 
+    # 1. Collect all "government" and "canada" boxes
     for item in normalized_results:
-        if re.search(r'government', item["text"], re.IGNORECASE) or \
-           re.search(r'gouvernement', item["text"], re.IGNORECASE):
+        if re.search(r'government|gouvernement', item["text"], re.IGNORECASE):
             gov_items.append(item)
         if re.search(r'canada', item["text"], re.IGNORECASE):
             canada_boxes.append(item)
-        if re.search(r'permanent', item["text"], re.IGNORECASE):
-            perm_boxes.append(item)
 
-     # --- 1️⃣ Find all "government" and "canada" entries ---
-    gov_valid = False
-    gov_ref_y = None
-    for g in gov_items:
-        if g["center_y"] < 0.15:
-            gov_valid = True
-            gov_ref_y = g["center_y"]
-            break
+    if not gov_items or not canada_boxes:
+        return 0.0
 
-    # --- 2️⃣ Check bottom-right Canada position ---
-    bottom_canada = max(canada_boxes, key=lambda b: b["center_y"], default=None)
-    canada_valid = False
-    if bottom_canada:
-        if bottom_canada["center_y"] > 0.8 and bottom_canada["center_x"] > 0.7:
-            canada_valid = True
-   
-    # --- 3️⃣ Check "permanent" below government ---
-    perm_valid = False
-    if gov_ref_y and perm_boxes:
-        tolerance = 0.03  # allow small vertical variation (~3% of image height)
-        for p in perm_boxes:
-            if abs(p["center_y"] - gov_ref_y) < tolerance:
-                perm_valid = True
-                break
+    # 2. Find the top-most government item and bottom-most canada item
+    top_gov = min(gov_items, key=lambda b: b["center_y"])
+    bottom_canada = max(canada_boxes, key=lambda b: b["center_x"])
 
-    score = 0
+    # 3. Calculate the vertical ratio
+    y_span = abs(bottom_canada["center_y"] - top_gov["center_y"])
+    x_span = abs(bottom_canada["center_x"] - top_gov["center_x"])
 
-    if gov_valid:
-        score += 1
-    if canada_valid:
-        score += 1
-    if perm_valid:
-        score += 1
-    confidence = round(score / 3, 2)
+    # 4. Calculate the Aspect Ratio (Height / Width)
+    aspect_ratio = y_span / x_span
+
+    MIN_EXPECTED_RATIO  = 0.8  
+    MAX_EXPECTED_RATIO = 1.2
+
+    # 4. Check if the aspect ratio falls within the acceptable range
+    if MIN_EXPECTED_RATIO <= aspect_ratio <= MAX_EXPECTED_RATIO:
+        confidence = 1.0
+    else:
+        confidence = 0.0
+
     return confidence
 
 def _keyword_in_ocr(texts) -> float:
@@ -86,9 +76,9 @@ def _keyword_in_ocr(texts) -> float:
     checks = {
         "gov_gouv": ["government", "gouvernement"],
         "perm_res_card": ["permanent", "resident", "card"],
-        "id_number": [r"\d{4}-\d{4}"],
         "name_label": ["name", "nom"],
         "id_label": ["id no","no id"],
+        "id_number": [r"\d{2}-\d{4}-\d{4}",r"\d{4}-\d{4}"],
         "nationality_label": ["nationality","nationalité"],
         "canada": ["canada"],
         "dob": ["date of birth", "date de naissance"],
@@ -122,17 +112,29 @@ def _keyword_in_drivers_license(texts) -> float:
 
     return confidence
 
-def _get_id_info(texts,full_name: str,id_number: str) -> str:
-    id_pattern  = r"\d{4}-\d{4}"
-    if id_number:
-        id_pattern = id_number
-    name_pattern = full_name
+def _get_id_info(texts,last_name: str,first_name: str,id_number: str) -> str:
+    id_pattern = id_number
+    last_name_pattern = last_name.strip()
+    first_name_pattern = first_name.strip()
+    found_id_number = ""
+    found_first_name = ""
+    found_last_name = ""
     info = {}
+
     for t in texts:
+        if found_id_number and found_first_name and found_last_name:
+            break
         if re.search(id_pattern, t, re.IGNORECASE):
-            info["id_number"] = re.search(id_pattern, t, re.IGNORECASE).group(0)
-        if name_pattern and re.search(name_pattern, t, re.IGNORECASE):
-            info["full_name"] = re.search(name_pattern, t, re.IGNORECASE).group(0)
+            found_id_number = re.search(id_pattern, t, re.IGNORECASE).group(0)
+        if first_name_pattern and re.search(first_name_pattern, t, re.IGNORECASE):
+            found_first_name = re.search(first_name_pattern, t, re.IGNORECASE).group(0)
+        if last_name_pattern and re.search(last_name_pattern, t, re.IGNORECASE):
+            found_last_name = re.search(last_name_pattern, t, re.IGNORECASE).group(0)
+    info['id_number'] = found_id_number
+    if not found_first_name or not found_last_name:
+        info['full_name'] = ""
+    else:
+        info['full_name'] = f"{found_first_name} {found_last_name}".strip()
     return info
 
 def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[str, Any]:
@@ -146,35 +148,59 @@ def _get_pr_card_verified_info(valid, confidence: float, details: str) -> Dict[s
 # Main validator
 # ------------------------------------------------------------
 def identification_service(image_url: str, register_info: dict) -> IdentificationResult:
-    image = get_image(source='URL', imgURL=image_url)
-    aws = AWSService()
-    ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
-    norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
+    
     reasons: List[str] = []
     doc: List[str] = []
-
+    texts = []
     valid = False
     notify_manually_check = False
     update_success = False
     keyword_confidence = 0.0
-
+    first_name = register_info.get("First_Name", "")
+    last_name = register_info.get("Last_Name", "")
     full_name = register_info.get("Full_Name", "")
     card_number = register_info.get("PR_Card_Number", "")
     phone_number = register_info.get("Phone_Number", "")
     email = register_info.get("Email", "")
     form_id = register_info.get("Form_ID", "")
     submission_id = register_info.get("Submission_ID", "")
+    course = register_info.get("Course", "")
+    course_date = register_info.get("Course_Date", "")
 
     try:
-        texts = [item["text"] for item in norm]
-        keyword_confidence = _keyword_in_ocr(texts)
-        drive_license_confidence = _keyword_in_drivers_license(texts)
+        image = get_image(source='URL', imgURL=image_url)
 
-        relative_position_confidence = _relative_position_rules(norm)
-         
+        local_ocr = local_image_to_text(image)
+        #local_norm = normalize(local_ocr,image.shape[1], image.shape[0])
+
+        local_texts = [item["text"] for item in local_ocr]
+        local_keyword_confidence = _keyword_in_ocr(local_texts)
+        #local_relative_position_confidence = _relative_position_rules(local_norm)
+        local_relative_position_confidence = _relative_position_rules(local_ocr)
+        local_drive_license_confidence = _keyword_in_drivers_license(local_texts)
+
+        if local_keyword_confidence > PR_CARD_KEYWORD_THRESHOLD and \
+            local_relative_position_confidence >= PR_CARD_POSITION_THRESHOLD and \
+                local_drive_license_confidence < PR_CARD_DRIVERS_LICENSE_THRESHOLD:
+            texts = local_texts
+            keyword_confidence = local_keyword_confidence
+            relative_position_confidence = local_relative_position_confidence
+            drive_license_confidence = local_drive_license_confidence
+
+        else:
+            aws = AWSService()
+            ocr:  List[Dict[str, Any]] = aws.extract_text_from_image(image)
+            #norm: List[Dict[str, Any]] = normalize(ocr,image.shape[1], image.shape[0])
+
+            texts = [item["text"] for item in ocr]
+            keyword_confidence = _keyword_in_ocr(texts)
+            drive_license_confidence = _keyword_in_drivers_license(texts)
+            relative_position_confidence = _relative_position_rules(ocr)
+
         # ✅ PR Card
         if keyword_confidence > PR_CARD_KEYWORD_THRESHOLD:
             valid = True
+            doc.append("PR_CARD")
             reasons.append(f"PR Card Check confidence is higher than the threshold.")
             # 🚫 Handwritten
             if relative_position_confidence < PR_CARD_POSITION_THRESHOLD:
@@ -192,39 +218,30 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
             doc.append("Generic_Photo_ID")
             valid = False
 
-        find_id_number = True
         id_info = {}
         if full_name and card_number:
-            id_info = _get_id_info(texts, full_name, card_number)
-            if "full_name" not in id_info or "id_number" not in id_info:
-                if "id_number" not in id_info:
-                    find_id_number = False
+            id_info = _get_id_info(texts, last_name,first_name, card_number)
+            if not id_info['full_name'] or not id_info['id_number']:
                 notify_manually_check = True
                 reasons.append(f"Full name or ID number does not match the input.")
                 valid = False
-        else:
-            id_info = _get_id_info(texts, full_name="", id_number="")
-            if "id_number" not in id_info:  
-                notify_manually_check = True
-                find_id_number = False
-                reasons.append(f"Cannot extract ID number from the image; manual review required.")
-                valid = False
-
+                id_info = {"full_name": full_name, "id_number": card_number}
+                
+        else: 
+            notify_manually_check = True
+            reasons.append(f"Missing full name or ID number in the registration info.")
+            valid = False
         identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
 
         card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
+        update_success = update_to_csv(
+            card_info, 
+            match_column=["Full_Name","PR_Card_Number","Course","Course_Date","Paid"], 
+            match_value=[full_name,card_number,course,course_date,""])
 
-        if find_id_number:
-            pr_card_id = id_info.get("id_number", card_number)
-            update_success = update_to_csv(card_info, match_column="PR_Card_Number", match_value=pr_card_id)
-        else:
-            if "full_name" in id_info:
-                pr_card_full_name = id_info.get("full_name")
-                update_success = update_to_csv(card_info, match_column="Full_Name", match_value=pr_card_full_name)
-        
         if not update_success:
             notify_manually_check = True
-            reasons.append("Failed to update the database; manual review required.")
+            reasons.append("Failed to update the database; Maybe no or several columns are found. Manual review required.")
 
         if notify_manually_check:
             formatted_reasons = "\n".join(reasons)
@@ -242,16 +259,15 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
 
             send_email(
                 subject="Manual Review Required for PR Card Verification",
-                recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
                 body= create_inform_staff_error_email_body(info)
             )
 
         result = {**identification_result.__dict__, "update_success": update_success, "PR_Card_INFO": id_info}
         return result
     except Exception as e:
-        # ❓ Unknown
         reasons += [str(e)]
-        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=[item["text"] for item in norm])
+        identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
         result = {**identification_result.__dict__, "update_success": False}
             
         formatted_reasons = "\n".join(reasons)
@@ -267,11 +283,9 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
             "Error_Message": error_message
         }
 
-        create_inform_staff_error_email_body(info)
-
         send_email(
             subject="Manual Review Required for PR Card Verification",
-            recipients=[current_app.config.get("ERROR_NOTIFICATION_EMAIL")],
+            recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
             body= create_inform_staff_error_email_body(info)
         )
 

@@ -26,6 +26,9 @@ def check_identification():
         register_info["Email"] = data.get("email", "")
         register_info["Form_ID"] = data.get("form_id", "")
         register_info["Submission_ID"] = data.get("submission_id", "")
+        register_info["Course"] = data.get("course", "")
+        register_info["First_Name"] = data.get("first_name", "")
+        register_info["Last_Name"] = data.get("last_name", "")
 
         if not data:
             return jsonify({"error": "Missing JSON payload"}), 400

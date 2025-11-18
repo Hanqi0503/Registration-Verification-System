@@ -12,16 +12,8 @@ def _get_sheet_cfg() -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: The configuration dict or None if missing/invalid.
     """
-    cfg = getattr(current_app, "db", None)
-    if not cfg:
-        print("❌ Google Sheet configuration missing from Flask application context")
-        return None
-    
-    if not isinstance(cfg, dict):
-        print("❌ Google Sheet configuration is not a dictionary")
-        return None
-    
-    return cfg
+    db = current_app.db  # uses app.db from your init_db()
+    data["created_at"] = datetime.utcnow().strftime('%Y-%m-%d')
 
 
 def _get_sheet_context() -> Tuple[Optional[Any], Optional[List[str]], Optional[Dict[str, Any]]]:

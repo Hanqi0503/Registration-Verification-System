@@ -114,6 +114,8 @@ class AWSService:
                 width = bbox.get("Width", 0.0)
                 height = bbox.get("Height", 0.0)
                 if text and bbox and width > 0 and height > 0:
+                    center_x = (left + width / 2.0) * img_width
+                    center_y = (top + height / 2.0) * img_height
                     items.append({
                         'text': text,
                         'confidence': block.get('Confidence', 0),
@@ -122,7 +124,9 @@ class AWSService:
                             'y1': int(top * img_height),
                             'x2': int((left + width) * img_width),
                             'y2': int((top + height) * img_height)
-                        }
+                        },
+                        'center_x': int(round(center_x)),
+                        'center_y': int(round(center_y))
                     })
         return items
 
@@ -135,7 +139,7 @@ class AWSService:
             list: List of detected text elements and corresponding normalized bounding boxes.
         """
 
-        image = image_preprocess(image)
+        #image = image_preprocess(image)
         image_width = image.shape[1]
         image_height = image.shape[0]
 

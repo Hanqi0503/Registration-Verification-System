@@ -50,7 +50,6 @@ def get_image(source = 'URL', imgURL = None, imgPath = None):
     Returns:
         The image as a NumPy array.
     """
-    print(f"Fetching image from {source}...")
     if source == 'URL':
         image_bytes = fetch_image_bytes(imgURL)
         image = bytes_to_cv2(image_bytes)
@@ -68,7 +67,7 @@ def local_image_to_text(image):
         list:  OCR results with text and bounding boxes.
     """
 
-    image = image_preprocess(image)
+    #image = image_preprocess(image)
 
     boxes = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
 
@@ -85,7 +84,9 @@ def local_image_to_text(image):
                 "y1": y,
                 "x2": x + w,
                 "y2": y + h,
-            }
+            },
+            "center_y": (y + y + h) / 2,
+            "center_x": (x + x + w) / 2
         }
         ocr_result.append(item)
 
@@ -100,7 +101,7 @@ def ninja_image_to_text(image):
         list: OCR results with text and bounding boxes. 
     """
 
-    image = image_preprocess(image)
+    #image = image_preprocess(image)
 
     if isinstance(image, np.ndarray):
         image = np.ascontiguousarray(image)
@@ -174,7 +175,6 @@ def fetch_image_bytes(image_url: str) -> bytes:
         full_url = f"{image_url}{sep}apiKey={Config.JOTFORM_API_KEY}"
     else:
         full_url = image_url
-
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -182,12 +182,14 @@ def fetch_image_bytes(image_url: str) -> bytes:
             "Chrome/58.0.3029.110 Safari/537.3"
         )
     }
-    response = requests.get(full_url, headers=headers)
+    try:
+        response = requests.get(full_url, headers=headers, timeout=15)
+    except requests.RequestException as e:
+        raise
     try:
         response.raise_for_status()
     except requests.HTTPError:
         raise
-
     content_type = response.headers.get('Content-Type', '')
     # If the server returned an image Content-Type, return it directly.
     if 'image' in content_type:

@@ -3,7 +3,6 @@ from flask import Flask
 from app.config.config import Config
 from app.services.database import init_google_sheet
 from app.routes import register_blueprints
-from app.background import start_payment_job
 from app.extensions.mail import mail
 
 from typing import Optional
