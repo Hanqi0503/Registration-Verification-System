@@ -5,6 +5,25 @@ from flask import current_app
 from app.utils import google_utils
 
 
+def _get_sheet_cfg() -> Optional[Dict[str, Any]]:
+    """
+    Retrieve the Google Sheet configuration from current_app.db.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The configuration dict or None if missing/invalid.
+    """
+    cfg = getattr(current_app, "db", None)
+    if not cfg:
+        print("❌ Google Sheet configuration missing from Flask application context")
+        return None
+    
+    if not isinstance(cfg, dict):
+        print("❌ Google Sheet configuration is not a dictionary")
+        return None
+    
+    return cfg
+
+
 def _get_sheet_context() -> Tuple[Optional[Any], Optional[List[str]], Optional[Dict[str, Any]]]:
     cfg = getattr(current_app, "db", None)
     if not cfg:
@@ -92,3 +111,120 @@ def get_from_csv(match_column: str, match_value: Any) -> Optional[List[Dict[str,
         return None
 
     return rows
+
+
+def add_to_sheet(data: Dict[str, Any]) -> bool:
+    """
+    Append a single record to the configured Google Sheet.
+    
+    Args:
+        data: Dictionary containing the record data to append.
+        
+    Returns:
+        bool: True if the record was successfully appended, False otherwise.
+    """
+    cfg = _get_sheet_cfg()
+    if not cfg:
+        return False
+    
+    sheet = cfg.get("sheet")
+    if sheet is None:
+        print("❌ Google Sheet worksheet handle is not initialized")
+        return False
+    
+    headers = cfg.get("headers")
+    if not headers:
+        google_utils.refresh_headers(cfg)
+        headers = cfg.get("headers")
+    
+    if not headers:
+        print("❌ Google Sheet header row is empty or missing")
+        return False
+    
+    try:
+        google_utils.append_record(sheet, headers, data)
+        return True
+    except Exception as exc:
+        print(f"❌ Failed to append data to Google Sheet: {exc}")
+        return False
+
+
+def update_to_sheet(data: Dict[str, Any], match_column: str, match_value: Any) -> bool:
+    """
+    Update a Google Sheet row matching the provided column/value pair.
+    
+    Args:
+        data: Dictionary containing the data to update.
+        match_column: Column name to match against.
+        match_value: Value to match in the specified column.
+        
+    Returns:
+        bool: True if a record was found and updated, False otherwise.
+    """
+    cfg = _get_sheet_cfg()
+    if not cfg:
+        return False
+    
+    sheet = cfg.get("sheet")
+    if sheet is None:
+        print("❌ Google Sheet worksheet handle is not initialized")
+        return False
+    
+    headers = cfg.get("headers")
+    if not headers:
+        google_utils.refresh_headers(cfg)
+        headers = cfg.get("headers")
+    
+    if not headers:
+        print("❌ Google Sheet header row is empty or missing")
+        return False
+    
+    try:
+        updated = google_utils.update_record(sheet, headers, match_column, match_value, data)
+        if not updated:
+            print(f"❌ No matching record found for {match_column} = {match_value}")
+            return False
+        return True
+    except Exception as exc:
+        print(f"❌ Failed to update Google Sheet record: {exc}")
+        return False
+
+
+def get_from_sheet(match_column: str, match_value: Any) -> Optional[List[Dict[str, Any]]]:
+    """
+    Retrieve row(s) from the Google Sheet matching the provided column/value pair.
+    
+    Args:
+        match_column: Column name to match against.
+        match_value: Value to match in the specified column.
+        
+    Returns:
+        Optional[List[Dict[str, Any]]]: List of matching records as dictionaries, or None if none found.
+    """
+    cfg = _get_sheet_cfg()
+    if not cfg:
+        return None
+    
+    sheet = cfg.get("sheet")
+    if sheet is None:
+        print("❌ Google Sheet worksheet handle is not initialized")
+        return None
+    
+    headers = cfg.get("headers")
+    if not headers:
+        google_utils.refresh_headers(cfg)
+        headers = cfg.get("headers")
+    
+    if not headers:
+        print("❌ Google Sheet header row is empty or missing")
+        return None
+    
+    try:
+        rows = google_utils.find_records(sheet, headers, match_column, match_value)
+        if not rows:
+            print(f"❌ No matching record found for {match_column} = {match_value}")
+            return None
+        return rows
+    except Exception as exc:
+        print(f"❌ Failed to query Google Sheet: {exc}")
+        return None
