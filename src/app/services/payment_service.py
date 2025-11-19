@@ -17,7 +17,7 @@ def payment_service(id, subject, body) -> dict:
     Args:
         id (str): Email ID to of Zeffy payment notifications.
         subject (str): Subject line of Zeffy payment notifications.
-        body (date): Date to of emails received since this date.
+        body (str): Body of the email.
     Returns: 
        A dictionary containing payment information extracted from the email.
     '''
@@ -108,7 +108,7 @@ def payment_service(id, subject, body) -> dict:
 
             return {
                 "status": "error",
-                "message": f"Failed to extract payment details from email with subject: {subject}"
+                "message": f"Failed to update database from email with subject: {subject}"
             }
 
         # Step 3: Verify the payment amount

@@ -4,14 +4,17 @@
 Lightweight Flask-based backend for handling registration + payment verification workflows.
 
 This repository provides a small MVC-style Flask application with:
-- environment-based configuration (python-dotenv)
-- a CSV-backed datastore for local development (and optional MongoDB support)
-- background job that checks payment notification emails using an interval scheduler
 - modular structure (routes, services, background jobs, utils)
+- a google spreadsheet datastore for cloud development
+- a local/AWS OCR that checks Canada PR Card
+- an automated email module that send out notification
 
 ## System Flowchart
 
 ![System Flowchart](png/Phase2-Flowchart.png)
+
+![TechStack Flowchart](png/TechStack.png)
+Interactive flowchart (Miro): https://miro.com/app/board/uXjVJo_6ibs=/?share_link_id=487025967242
 
 
 ## Quick overview
@@ -122,26 +125,87 @@ Visit http://127.0.0.1:5050 (or the host/port from your `.env`) to see the landi
 
 ## Configuration
 
-- Edit `.env` (copy from `.env.example`) and fill required values: MongoDB creds (if used), AWS/S3 keys (if used), admin email, and scheduler interval `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES`.
+- Edit `.env` (copy from `.env.example`) and fill required values: MongoDB creds (if used), AWS/S3 keys (if used), admin email.
 - `src/app/config/config.py` provides a `Config` class that reads env vars and offers `Config.validate_required()` to fail fast on missing required keys.
 
-Notes:
-- `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES` must be an integer; the background scheduler expects a numeric minutes value.
-- If you see errors about saving CSV files to a non-existent `data` directory, either create the directory or let the `init_csv` helper create it for you. The repository already contains a `data/registration_data.csv` example.
 
 Additional configuration variables
 - `JOTFORM_API_KEY` - (optional) API key used when fetching image URLs hosted by JotForm. When present the utility will append it as `?apiKey=...` to JotForm URLs.
-- `NINJA_API_URL` - (optional) Image->text OCR endpoint used by the `ninja_image_to_text` helper (default: `https://api.api-ninjas.com/v1/imagetotext`).
-- `NINJA_API_KEY` - (optional but required if you call the Ninja OCR service) API key for the Image->Text API (api-ninjas.com).
 
-## Data storage
 
-- Local development doubles as a CSV-backed datastore in `data/registration_data.csv` (managed by `app.services.database.init_csv`). The service resolves that path relative to the project root so running from other working directories still works.
-- For production or scalable scenarios, the app can use MongoDB (`pymongo`) — credentials are loaded from env and the `init_mongoDB` helper shows how to construct the client.
+## Data storage (Google Sheets or CSV)
+
+- Default local development originally used a CSV-backed datastore (`data/registration_data.csv`) managed by `app.services.database`. You can continue using a local CSV, however this project also supports using Google Sheets as the primary backing store for local development and lightweight deployments.
+
+- Google Sheets is useful when you want a simple, shareable spreadsheet UI instead of opening the CSV file directly. When enabled the app will read/write rows to a Google Sheet and mirror many CSV behaviors (case-insensitive headers, empty-cell matching).
+
+How to choose:
+
+- CSV (local): keep using `data/registration_data.csv` — no external services required. Ensure `data/` exists.
+- Google Sheets: recommended for collaborative local testing and when you prefer a sheet UI. The instructions below show how to enable Sheets and configure credentials.
+- Change root __init__.py file ```app.db``` is equal to ```init_csv()``` or ```init_google_sheet()```.
+## Google Sheets setup (GCP) — replace local CSV with a Sheet
+
+Follow these steps to enable Google Sheets for local development and to let the app read/write registration rows directly to a sheet.
+
+1) Create a Google Cloud project (or use an existing one)
+	- Visit https://console.cloud.google.com/ and create/select a project.
+
+2) Enable APIs
+	- Enable the "Google Sheets API" (and optionally the "Google Drive API" if you plan to manage file permissions programmatically).
+
+3) Create a service account
+	- IAM & Admin → Service Accounts → Create Service Account
+	- Give it a descriptive name (e.g. "reg-verif-sheets-sa").
+
+4) Create and download a JSON key
+	- In the service account page, create a new key (JSON) and download it.
+	- IMPORTANT: keep this file private. DO NOT commit it to git.
+
+5) Place the key into the repository (for local development only)
+	- Put the downloaded JSON into the project at `src/data/key/credentials.json` (or update the path below if you prefer another location).
+	- Example (do NOT run this in CI or commit the file):
+
+```bash
+# copy credentials locally (example)
+mkdir -p src/data/key
+cp /path/to/downloaded-key.json src/data/key/credentials.json
+```
+
+6) Set environment variables
+	- In your `.env` file set the following values:
+
+```text
+# Google Sheets
+GOOGLE_SPREADSHEET_ID=your_google_sheet_id_here
+GOOGLE_WORKSHEET_NAME=your_google_sheet_name_here
+```
+
+* Note:
+	If your Google Sheet URL looks like this:
+
+	https://docs.google.com/spreadsheets/d/**12345-AbCdEfGhIjKlMnOpQrStUvWzYx**/edit#gid=0
+
+	The Google Sheet ID is: 12345-AbCdEfGhIjKlMnOpQrStUvWzYx
+
+7) Share the spreadsheet with the service account
+	- Open your Google Sheet in the browser.
+	- Click "Share" and add the `client_email` value from your `credentials.json` (it looks like `your-sa-name@project-id.iam.gserviceaccount.com`) as an Editor. This grants the service account permission to read/write the sheet.
+
+8) Confirm scopes
+	- The app requests at least the `https://www.googleapis.com/auth/spreadsheets` scope. If you enabled Drive API, include `https://www.googleapis.com/auth/drive` when creating credentials or in your code's scope list.
+
+9) Run the app
+	- With credentials present and the sheet shared, start the app normally. The app's initialization will load the credentials (from `GOOGLE_APPLICATION_CREDENTIALS`) and open the sheet by `SHEET_ID`.
+
+Security notes
+	- Never commit service account keys to git. Add `src/data/key/credentials.json` to `.gitignore`.
+	- Rotate/delete keys immediately if they are accidentally committed or leaked.
+	- For CI or production, use secret managers (GitHub Actions secrets, GCP Secret Manager, etc.) or mount the key at runtime rather than storing it in repository source.
 
 ## Background jobs
 
-- The payment watcher uses APScheduler to poll email notifications (see `src/app/background/payment_watcher.py`). Configure the interval via `CHECK_ZEFFY_EMAIL_TIME_BY_MINUTES` in `.env`.
+The system uses Google Script to call payment_service and reminder_service daily.
 
 ## Routes
 
@@ -153,21 +217,21 @@ All application routes are registered under the `/api` prefix. The main endpoint
 	- Returns: JSON with `registration` (processed registration details) and `identification` (The result of checking PR Card) .
 	- Example:
 
-```bash
-curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "rawRequest={
-    'slug': 'submit/253056105937053',
-    'q6_legalName': {'first': 'YuYing', 'last': 'Wu3'},
-    'q8_email': 'yuying.wu@example.com',
-    'q9_phoneNumber': {'full': '+1 647 123 4567'},
-    'q26_payersName': {'first': 'YuYing', 'last': 'Wu'},
-    'q29_areYou': 'Yes I am',
-    'q11_prCard': '0000-0000',
-    'clearFront': ['https://files.jotform.com/uploads/example_front_card.jpg'],
-    'course': {'products': [{'productName': 'Standard First Aid with CPR Level C & AED Certification'}]}
-  }"
-```
+		```bash
+		curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--data-urlencode "rawRequest={
+			'slug': '/253056105937053',
+			'q6_legalName': {'first': 'YuYing', 'last': 'Wu3'},
+			'q8_email': 'yuying.wu@example.com',
+			'q9_phoneNumber': {'full': '+1 647 123 4567'},
+			'q26_payersName': {'first': 'YuYing', 'last': 'Wu'},
+			'q29_areYou': 'Yes I am',
+			'q11_prCard': '0000-0000',
+			'clearFront': ['https://files.jotform.com/uploads/example_front_card.jpg'],
+			'course': {'products': [{'productName': 'Standard First Aid with CPR Level C & AED Certification'}]}
+		}"
+		```
 
 - POST /api/registration-webhook
 	- Description: Receives Course Registration submissions. Expects JSON body.
@@ -175,112 +239,106 @@ curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amo
 	- Returns: JSON with `message` and `result` (processed registration details).
 	- Example:
 
-```bash
-curl -X POST "http://127.0.0.1:5050/api/registration-webhook?pr_amount=150&normal_amount=100" \
-	-H "Content-Type: application/json" \
-	-d '{
-  	"slug": "submit/253056105937053",
-    "q6_legalName": {
-      "first": "YuYing",
-      "last": "Wu3"
-    },
-    "q8_email": "yuying.wu@example.com",
-    "q9_phoneNumber": {
-      "full": "+1 647 123 4567"
-    },
-    "q26_payersName": {
-      "first": "YuYing",
-      "last": "Wu"
-    },
-    "q29_areYou": "Yes I am",
-    "q11_prCard": "0000-0000",
-    "clearFront": [
-      "https://files.jotform.com/uploads/example_front_card.jpg"
-    ],
-	"course": {
-        "products": [
-            {
-                "productName": "Standard First Aid with CPR Level C & AED Certification"
-            }
-        ]
-    }
-}'
-```
+		```bash
+		curl -X POST "http://127.0.0.1:5050/api/registration-webhook?pr_amount=150&normal_amount=100" \
+			-H "Content-Type: application/json" \
+			-d '{
+			"slug": "/253056105937053",
+			"q6_legalName": {
+			"first": "YuYing",
+			"last": "Wu3"
+			},
+			"q8_email": "yuying.wu@example.com",
+			"q9_phoneNumber": {
+			"full": "+1 647 123 4567"
+			},
+			"q26_payersName": {
+			"first": "YuYing",
+			"last": "Wu"
+			},
+			"q29_areYou": "Yes I am",
+			"q11_prCard": "0000-0000",
+			"clearFront": [
+			"https://files.jotform.com/uploads/example_front_card.jpg"
+			],
+			"course": {
+				"products": [
+					{
+						"productName": "Standard First Aid with CPR Level C & AED Certification"
+					}
+				]
+			}
+		}'
+		```
 
-- GET /api/check-payments
-	- Description: Triggers a one-time scan for payment emails if CFSO_ADMIN_EMAIL_USER and UNIC_ADMIN_EMAIL_USER are set and returns matched results.
-	- Query params (optional):
-	  - `from` (email address, defaults to `ZEFFY_EMAIL` from config)
-	  - `subject` (defaults to `ZEFFY_SUBJECT`)
-	  - `since_date` (ISO date string `YYYY-MM-DD`) — if provided, only emails on/after this date will be processed.
-	- Returns: JSON with `count` (number of processed emails) and `results` (array of result objects).
-		Each result item will typically be one of:
-
-		- Failure example (extraction failed):
-
-	```json
-	{
-		"update_success": false,
-		"message": "Unable to extract payment info from email body",
-		"email_subject": "Payment Received - order 12345"
-	}
-	```
-
-		- Success example (payment info extracted and DB update attempted):
-
-	```json
-	{
-		"Full_Name": "Name",
-		"Actual_Paid_Amount": 150.0,
-		"Payment_Status": true,
-		"Paid": true,
-		"Course": "Course Name",
-		"Course_Date": "November 9, 2025 at 9:30 AM EST"
-	}
-	```
+- POST /api/check-payments
+	- Description: Trigger a scan of incoming payment notification email(Zeffy) body and attempt to match corresponding payment to a registration record. When a matching registration is found the service will try to update the backing store (Google Sheet or local CSV) and — depending on the result — send client and/or staff notification emails.
+	- Payload:
+	  - `id`  (Email ID to of Zeffy payment notifications.)
+	  - `subject` (Subject line of Zeffy payment notifications.)
+	  - `body` (Body of the email.)
+	- Returns: A dictionary containing payment information extracted from the email.
+		
 	- Example:
 
-```bash
-curl "http://127.0.0.1:5050/api/check-payments?from=no-reply%40gmail.com&subject=Payment+Received&since_date=2025-10-01"
-```
+		```bash
+		curl -X POST "http://127.0.0.1:5050/api/check-payments" \
+			-H "Content-Type: application/json" \
+			-d '{
+			"id": "253056105937053",
+			"subject": "New Purchase",
+			"body": "Dear Customer"
+			}'
+		```
+- GET /api/payment-reminders
+	- Description: Trigger sending payment reminder emails to registrants who have not completed payment. The endpoint runs the reminder workflow which locates unpaid registrations and sends a client-facing reminder email.
+	- Response: JSON `{ count: int, results: List[object] }`
+		- `count`: number of reminders processed.
+		- `results`: array of result objects with fields such as:
+
+	- Example:
+
+		```bash
+		curl "http://127.0.0.1:5050/api/payment-reminders"
+		```
 
 - POST /api/check-identification
 	- Description: Submit an image for PR Card. The endpoint currently expects a JSON body with an `image_url` pointing to the image to analyze. The service will fetch the image, run OCR and heuristics, and return an identification result.
 	- Body (application/json):
-	  - `image_url` (string, required) — public URL pointing to the image to analyze. Example values: a direct image link (`https://.../image.jpg`) or a hosting URL that contains an `<img>` tag (the helper will extract the first image found).
-	  - `registration_data` (json) - course registration detail, only if match return valid result
-	  	- `Full_Name` (required)
-		- `PR_Card_Number` (required)
-		- `Phone_Number`
-		- `Email`
-		- `Form_ID`
-		- `Submission_ID`
-		- `Course`
+		- `image_url` (string, required) — public URL pointing to the image to analyze. Example values: a direct image link (`https://.../image.jpg`) or a hosting URL that contains an `<img>` tag (the helper will extract the first image found).
+		- `registration_data` (json) - course registration detail, only if match return valid result
+			- `Full_Name` (required)
+			- `PR_Card_Number` (required)
+			- `Phone_Number`
+			- `Email`
+			- `Form_ID`
+			- `Submission_ID`
+			- `Course`
 	- Returns: JSON representation of the `IdentificationResult` dataclass with the following fields:
-	  - `doc_type` (array of string): candidate document types detected (e.g. `["PR_CARD"]`).
-	  - `is_valid` (boolean): whether the document is considered a valid match.
-	  - `confidence` (float): confidence score between 0.0 and 1.0.
-	  - `reasons` (array of string): human-readable reasons / cues used for the decision.
-	  - `raw_text` (array of string): OCR-extracted text lines / tokens used by the heuristics.
+		- `doc_type` (array of string): candidate document types detected (e.g. `["PR_CARD"]`).
+		- `is_valid` (boolean): whether the document is considered a valid match.
+		- `confidence` (float): confidence score between 0.0 and 1.0.
+		- `reasons` (array of string): human-readable reasons / cues used for the decision.
+		- `raw_text` (array of string): OCR-extracted text lines / tokens used by the heuristics.
 	- Example request (curl):
 
-```bash
-curl -X POST "http://127.0.0.1:5050/api/check-identification" \
-  -H "Content-Type: application/json" \
-  -d '{"image_url": "https://example.com/path/to/document.jpg"}'
-```
+		```bash
+		curl -X POST "http://127.0.0.1:5050/api/check-identification" \
+		-H "Content-Type: application/json" \
+		-d '{"image_url": "https://example.com/path/to/document.jpg"}'
+		```
 
 	- Example response (200):
 
-```json
-{
-  "doc_type": ["PR_CARD"],
-  "is_valid": true,
-  "confidence": 0.78,
-  "reasons": ["PR Card Check confidence is higher than the threshold."],
-  "raw_text": ["canada", "permanent", "resident", "name", "doe, jane"]
-}
-```
+	```json
+	{
+	"doc_type": ["PR_CARD"],
+	"is_valid": true,
+	"confidence": 0.78,
+	"reasons": ["PR Card Check confidence is higher than the threshold."],
+	"raw_text": ["canada", "permanent", "resident", "name", "doe, jane"]
+	}
+	```
 
 ## Image utilities & OCR
 
@@ -309,6 +367,7 @@ Dependencies
 	- `numpy` — array / ndarray handling
 	- `opencv-python` (imported as `cv2`) — image processing and computer vision
 	- `pytesseract` — Python wrapper for the Tesseract OCR engine
+	- `gspread` - Google Sheet
 
 Additional system dependency:
 - Tesseract OCR binary (required by `pytesseract`). Install on macOS with `brew install tesseract` or on Debian/Ubuntu with `sudo apt install tesseract-ocr`.
@@ -317,7 +376,6 @@ Additional system dependency:
 
 This guide outlines the automated email notifications generated by the webhook processing system, providing context and next steps for operational staff and clients.
 
----
 
 ## 🧑‍💻 Staff Notifications (Action & Review Required)
 
@@ -333,10 +391,11 @@ These notifications alert staff to system failures, payment discrepancies, or va
 
 | Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **2.1** | **Review: Payment Mismatch (Payer Notified)** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. | ★★ |
-| **2.2** | **Review: Payment Mismatch (Payer Not UN-notified)** | 📧 | Payment mismatch occurred, but the system could not send the cancellation email (Email missing or invalid in the database). | Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. | ★★ |
-| **2.3** | **Review: Failed to Update Payment Record** | ❌ | System failed to locate or update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. | ★★ |
-| **2.4** | **Review: Payment Check - Other Error** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
+| **2.1** | **Manual Review Required for Zeffy Payment Checking: Extraction Failed** | ❌ | Cannot Extract Full Name and Paid Amount Information from the email. | Go to mailbox; Manually check the mail content and update the database and manually send out registration notification. | ★★ |
+| **2.2** | **Manual Review Required for Zeffy Payment Checking: Multiple or No Records Found** | 📧  | System failed to locate the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. Need to manually send out registration notification after clear the issue. | ★★ |
+| **2.3** | **Manual Review Required for Zeffy Payment Checking: Payment Amount Mismatch** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. The system will automatically resend registration notification after then. | ★ |
+| **2.2** | **Manual Review Required for Zeffy Payment Checking: Update Database Failed** | 📧 | System failed to update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. |  Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. Need to manually send out registration notification after clear the issue. | ★★ |
+| **2.4** | **Manual Review Required for Zeffy Payment Checking: Exception Occurred** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
 
 ### 3. PR Card Verification Errors (OCR)
 
@@ -371,7 +430,8 @@ These are the emails sent directly to the client.
 
 | Subject | Emoji Key | Reason & Key Message | Status |
 | :--- | :--- | :--- | :--- |
-| **Action Required: Payment Mismatch for Course Registration** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
+| **Payment Reminders for: [\*Course Name\*] Course Registration** | 🚨 | The reminder for the course registration payment to secure your spot. | **Reminder** |
+| **Payment Discrepancy for Your Course Registration** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
 | **Confirmation: Your Spot in [\*Course Name\*] is Secured!** | ✅ | All registration details and payment validations have passed. Your spot in the course is confirmed. | **Confirmed** |
 
 
