@@ -27,7 +27,7 @@ def reminder_nonpaid_email() -> str:
             detail.append(info)
 
             send_email(
-                subject=f"CFSO X UNIC Payment Reminder: {course} on {course_date}",
+                subject=f"Payment Reminders for: {course} Course Registration",
                 recipients=[email],
                 body=create_inform_client_payment_reminder_email_body(info)
             )

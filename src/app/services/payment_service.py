@@ -126,10 +126,11 @@ def payment_service(id, subject, body) -> dict:
                 "Actual Paid Amount": actual_amount,
                 "Full_name": full_name,
                 "Course": rows[0].get("Course"),
+                "Payment Link": rows[0].get("Payment_Link"),
                 "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if rows[0].get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER")
             }
             send_email(
-                subject="Course Payment Amount Mismatch - Action Required",
+                subject="Payment Discrepancy for Your Course Registration",
                 recipients=[rows[0].get("Email")],
                 body=create_inform_client_payment_error_email_body(info)
             )
