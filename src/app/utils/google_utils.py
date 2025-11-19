@@ -192,7 +192,7 @@ def _row_to_dict(headers: List[str], row: List[Any]) -> Dict[str, Any]:
 def _build_row(headers: List[str], data: Dict[str, Any]) -> List[Any]:
     row: List[Any] = []
     for header in headers:
-        default = datetime.utcnow().isoformat() if header.lower() == "created_at" else ""
+        default = datetime.utcnow().strftime('%Y-%m-%d') if header.lower() == "created_at" else ""
         value = _resolve_value(header, data, default)
         row.append(_serialize_value(value))
     return row
