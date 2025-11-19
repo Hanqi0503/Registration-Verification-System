@@ -1,7 +1,7 @@
 from flask import Flask
 
 from app.config.config import Config
-from app.services.database import init_csv
+from app.services.database import init_google_sheet
 from app.routes import register_blueprints
 from app.extensions.mail import mail
 
@@ -12,11 +12,9 @@ def create_app(config_object: Optional[str] = None):
     app = Flask(__name__)
     app.config.from_object(config_object or Config)
 
-    # optional: fail fast if required env vars missing
-    #Config.validate_required()
-
     mail.init_app(app)
 
-    app.db = init_csv()
+    app.db = init_google_sheet()
+    
     register_blueprints(app)
     return app

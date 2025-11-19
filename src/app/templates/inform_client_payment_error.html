@@ -17,38 +17,39 @@
   <body>
     <div class="container">
       <div class="header">
-        <h2 style="margin:0;">Payment notice from CFSO</h2>
+        <h2 style="margin:0;">Payment Discrepancy for Your Course Registration</h2>
       </div>
       <div class="content">
         <p>Hi {{ full_name }},</p>
 
-        <p class="small">Thanks for your registration. We reviewed your payment for the <strong>{{ course }}</strong> course.</p>
+        <p>Thank you for registering for the <strong>{{ course }}</strong>.</p>
 
-        <p>We found that the amount you paid (<strong>{{ actual_amount }}</strong>) does not match the expected amount for this course (<strong>{{ expected_amount }}</strong>).</p>
+        <p class="important">We noticed a discrepancy between the payment amount you submitted and the course fee.</p>
 
-        <p>Because the payment amount is incorrect, our staff will cancel the current payment and you will need to submit the correct payment on Zeffy.</p>
+        <p class="small">You paid (<strong>{{ actual_amount }}</strong>) does not match the expected amount for this course (<strong>{{ expected_amount }}</strong>).</p>
 
-        <!-- {% if zeffy_link %}
-        <p>
-          <a class="button" href="{{ zeffy_link }}">Pay now on Zeffy</a>
-        </p>
-        {% endif %} -->
+        <p> To complete your registration, please ensure the remaining balance is paid promptly using the following link:</p>
 
-        <p class="muted">If you believe this is an error or you have any questions, please contact CFSO at <strong>{{ support_contact }}</strong> and we will help you.</p>
+        <a href="{{ payment_link }}" class="button">Make Payment Now</a>
+
+        <p>Please note, without the correct payment, we will be unable to process your registration, and the instructor will not be able to admit you to the course.</p>
+
+        <p>We appreciate your understanding and cooperation in resolving this matter. If you have any questions or require assistance, please don’t hesitate to contact us.</p>
 
         <hr />
 
-        <p class="small">Summary</p>
-        <ul>
-          <li>Course: <strong>{{ course }}</strong></li>
-          <li>Amount you paid: <strong>{{ actual_amount }}</strong></li>
-          <li>Expected amount: <strong>{{ expected_amount }}</strong></li>
-        </ul>
-
-        <p class="small">If you have already paid the correct amount via Zeffy, please ignore this message.</p>
-
-        <p class="small">Thanks,<br/>CFSO Team</p>
+         <p class="muted">If you believe this is an error or you have any questions, please contact CFSO at <strong>{{ support_contact }}</strong> and we will help you.</p>
+        
       </div>
+      <div class="footer">
+
+        <p class="small">Support CFSO's work with mental health, family services, newcomer settlement, disabilities and special needs
+by e-transferring to donations@cfso.care.</p>
+
+        <p class="small">Check out our upcoming events 了解更多家和最新活動: 🔗https://linktr.ee/cfso.care</p>
+
+        <p>Best regards,<br />
+        Community Family Services of Ontario</p>
     </div>
   </body>
 </html>

@@ -1,6 +1,6 @@
 from flask import current_app
 from app.services import identification_service, registration_service
-from app.utils.database_utils import get_from_csv
+from app.utils.database_utils import get_from_sheet
 from app.utils.imap_utils import create_inform_staff_ocr_success_email_body, send_email, create_inform_client_success_email_body, create_inform_staff_success_email_body
 
 def jotform_service(data, pr_amount, normal_amount):
@@ -63,7 +63,7 @@ def jotform_service(data, pr_amount, normal_amount):
             "registration": registration_data
         }
 
-    rows = get_from_csv(
+    rows = get_from_sheet(
         match_column=[
             "Full_Name", 
             "Course", 

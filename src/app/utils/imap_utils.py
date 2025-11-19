@@ -78,6 +78,7 @@ def create_inform_client_payment_error_email_body(info: dict) -> str:
         expected_amount=info['Expected Amount'],
         actual_amount=info['Actual Paid Amount'],
         support_contact=info['Support Contact'],
+        payment_link=info['Payment Link']
     )
 
     return client_email_body

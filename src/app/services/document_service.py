@@ -6,7 +6,7 @@ from flask import current_app
 from app.models import IdentificationResult
 from app.utils.image_utils import ninja_image_to_text, local_image_to_text,get_image,normalize
 from app.utils.aws_utils import AWSService
-from app.utils.database_utils import update_to_csv
+from app.utils.database_utils import update_to_sheet
 from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
 # ------------------------------------------------------------
 # Thresholds
@@ -234,7 +234,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
 
         card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
-        update_success = update_to_csv(
+        update_success = update_to_sheet(
             card_info, 
             match_column=["Full_Name","PR_Card_Number","Course","Course_Date","Paid"], 
             match_value=[full_name,card_number,course,course_date,""])

@@ -49,26 +49,17 @@
     </div>
     
     <div class="content">
-        <p>Dear {{ full_name }},</p>
+        <p>Hi {{ full_name }},</p>
         
-        <p>We noticed that we haven't received your payment for the following course:</p>
+        <p>Thank you for your interest in our {{ course }} on {{ course_date }}. We have received your registration for the course.</p>
         
-        <div style="margin: 20px 0; padding: 15px; background-color: #fff; border-left: 4px solid #5bc0de;">
-            <strong>Course:</strong> {{ course }}<br>
-            <strong>Date:</strong> {{ course_date }}
-        </div>
+        <p class="important">However, we are unable to locate your payment in our system.</p>
         
-        <p class="important">Please complete your payment to secure your spot in the course.</p>
-        
-        <p>To make your payment:</p>
+        <p>To confirm your seat, please complete your payment as soon as possible using the updated payment link below:</p>
         <a href="{{ payment_link }}" class="button">Make Payment Now</a>
         
-        <p>Important notes:</p>
-        <ul>
-            <li>Your registration is not confirmed until payment is received</li>
-            <li>Spots are allocated on a first-come, first-served basis</li>
-            <li>We cannot guarantee seat availability without payment</li>
-        </ul>
+        <p>Kindly ensure the payment is completed promptly to secure your spot in the class.</p>
+
     </div>
 
     <div class="footer">
@@ -78,7 +69,7 @@
         {{ support_contact }}</p>
         
         <p>Best regards,<br>
-        Course Registration Team</p>
+        Community Family Services of Ontario</p>
     </div>
 </body>
 </html>

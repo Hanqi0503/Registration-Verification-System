@@ -1,6 +1,6 @@
 from flask import current_app
 from app.utils.extraction_tools import extract_form_id, extract_submission_id
-from app.utils.database_utils import add_to_csv
+from app.utils.database_utils import add_to_sheet
 from app.utils.file_utils import process_file_uploads
 from app.utils.imap_utils import create_inform_staff_error_email_body, send_email
 import re
@@ -106,8 +106,8 @@ def registration_service(data, pr_amount, normal_amount):
         submission_id = extract_submission_id(pr_file_upload_urls)
         registration_data['Submission_ID'] = submission_id
     # Store extracted data into app database
-    csv_data = add_to_csv(registration_data)
-    if csv_data is None:
+    csv_data = add_to_sheet(registration_data)
+    if csv_data is None or csv_data is False or (hasattr(csv_data, "empty") and csv_data.empty):
 
         info = {
                 "Form_ID": form_id,

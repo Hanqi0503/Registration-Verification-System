@@ -1,8 +1,13 @@
+from flask import json
 from pymongo import MongoClient
 import pandas as pd
 from pathlib import Path
-from app.config.config import Config
 from typing import Optional
+from google.oauth2.service_account import Credentials
+import gspread
+
+from app.config.config import Config
+
 def init_mongoDB():
     """
     Initialize MongoDB connection and return the database instance.
@@ -54,3 +59,39 @@ def init_csv(file_path: Optional[str] = None):
         print(f"✅ Loaded existing CSV file from {path}")
 
     return {"path": path}
+
+
+def init_google_sheet(file_path: Optional[str] = None):
+    """
+    Initialize Google Sheet connection details for use throughout the app.
+    Args:
+        file_path (str): Path to the google sheet credential json file.
+    Returns:
+        dict: Contains the authorized client, worksheet, and cached headers.
+    """
+    spreadsheet_id = Config.GOOGLE_SPREADSHEET_ID
+    worksheet_name = Config.GOOGLE_WORKSHEET_NAME
+
+    if not spreadsheet_id:
+        raise RuntimeError("GOOGLE_SPREADSHEET_ID is not configured.")
+
+    project_root = Path(__file__).resolve().parents[2]
+
+    if file_path:
+        p = Path(file_path)
+        path = p if p.is_absolute() else (project_root / p)
+    else:
+        path = project_root /"data" / "key" /"credentials.json"
+
+    info = json.loads(path.read_text())
+
+    credentials = Credentials.from_service_account_info(info, scopes=("https://www.googleapis.com/auth/spreadsheets",))
+    client = gspread.authorize(credentials)
+    spreadsheet = client.open_by_key(spreadsheet_id)
+    worksheet = spreadsheet.worksheet(worksheet_name) if worksheet_name else spreadsheet.sheet1
+
+    headers = [h.strip() for h in worksheet.row_values(1)]
+    if not headers:
+        raise RuntimeError("The Google Sheet must contain a header row in the first row.")
+
+    return {"client": client, "sheet": worksheet, "headers": headers}
