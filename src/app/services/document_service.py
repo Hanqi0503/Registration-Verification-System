@@ -207,11 +207,13 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
                 doc.append("HANDWRITTEN")
                 reasons += ["Very little structured text; likely hand-written note"]
                 valid = False
+                notify_manually_check = True
             # 🚫 Driver’s License
             if drive_license_confidence >= PR_CARD_DRIVERS_LICENSE_THRESHOLD:
                 doc = "DRIVERS_LICENSE"
                 reasons += [f"Driver’s licence cues (score={drive_license_confidence})"]
                 valid = False
+                notify_manually_check = True
         # 🚫 Generic Photo ID
         else:
             reasons.append(f"PR Card Keyword found confidence is lower than the threshold.")

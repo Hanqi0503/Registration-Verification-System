@@ -52,9 +52,11 @@ def registration_service(data, pr_amount, normal_amount):
     full_name = f"{first_name} {last_name}"
     email = _get_value_by_partial_key(data, EMAIL)
     phone_number = _get_value_by_partial_key(data, PHONE).get(FULL)
-    payer_full_name = f"{_get_value_by_partial_key(data, PAYER_NAME)[FIRST]} {_get_value_by_partial_key(data, PAYER_NAME)[LAST]}"
+    if _get_value_by_partial_key(data, PAYER_NAME):
+        payer_full_name = f"{_get_value_by_partial_key(data, PAYER_NAME)[FIRST]} {_get_value_by_partial_key(data, PAYER_NAME)[LAST]}"
     type_of_status = _get_value_by_partial_key(data, TYPE_OF_STATUS)
-    full_course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
+    if _get_value_by_partial_key(data, COURSE):
+        full_course = _get_value_by_partial_key(data, COURSE)["products"][0]["productName"]
     payment_link = _get_value_by_partial_key(data, PAYMENTLINK)
     date_pattern = r'(?:\d{4}\.)?\d{1,2}\.\d{1,2}\s*\([A-Za-z]{3}\)'
     match = re.search(date_pattern, full_course)
